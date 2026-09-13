@@ -8,7 +8,7 @@
 
 フロントエンドのプロトタイプをVercelで公開しています。
 
-https://health-bridge-git-develop-asahis-projects-68747281.vercel.app/
+https://health-bridge-management.vercel.app/
 
 > [!NOTE]
 > 現在のデモは画面・操作フローを確認するためのプロトタイプです。表示データにはモックデータを使用しており、バックエンドAPI・データベースとはまだ接続していません。
