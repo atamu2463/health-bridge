@@ -108,4 +108,8 @@ https://health-bridge-management.vercel.app/
 
 ## 設計ドキュメント
 
-要件・設計・レビュー内容については、`docs/`ディレクトリへ応募用ドキュメントとして整理する予定です。
+要件・設計・レビュー内容は、以下のドキュメントに整理しています。
+
+- [要件定義](docs/requirements.md)
+- [システム構成](docs/architecture.md)
+- [レビュー・改善履歴](docs/review-history.md)
