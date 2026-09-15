@@ -4,7 +4,10 @@ import { useState } from "react"
 import { CalendarDays } from "lucide-react"
 
 import { AppHeader } from "@/components/app-header"
-import { EmployeeList, type StatusFilter } from "@/components/employee-list"
+import {
+  EmployeeList,
+  type StatusFilter,
+} from "@/components/employee-list"
 import { useMockApp } from "@/components/mock-app-provider"
 import { WorkflowBackLink } from "@/components/workflow-back-link"
 import { Badge } from "@/components/ui/badge"
@@ -28,43 +31,70 @@ const filterLabels = {
 } as const
 
 export default function ManagerDashboardPage() {
-  const { employees, managerByEmployee } = useMockApp()
-  const [date, setDate] = useState(() => getLocalDateKey())
-  const [filter, setFilter] = useState<StatusFilter>(null)
+  const {
+    employees,
+    currentManager,
+    managerByEmployee,
+  } = useMockApp()
+
+  const [date, setDate] = useState(() =>
+    getLocalDateKey(),
+  )
+
+  const [filter, setFilter] =
+    useState<StatusFilter>(null)
 
   const visibleEmployees = employees.filter(
     (employee) =>
-      managerByEmployee[employee.id] === "鈴木 花子" &&
+      managerByEmployee[employee.id] ===
+        currentManager &&
       isEmployeeVisibleOnDate(employee, date),
   )
 
   const counts = {
-    caution: visibleEmployees.filter((employee) => {
-      const record = getRecordForDate(employee, date)
+    caution: visibleEmployees.filter(
+      (employee) => {
+        const record = getRecordForDate(
+          employee,
+          date,
+        )
 
-      return (
-        record?.clockIn?.status === "caution" ||
-        record?.clockOut?.status === "caution"
-      )
-    }).length,
+        return (
+          record?.clockIn?.status ===
+            "caution" ||
+          record?.clockOut?.status ===
+            "caution"
+        )
+      },
+    ).length,
 
-    bad: visibleEmployees.filter((employee) => {
-      const record = getRecordForDate(employee, date)
+    bad: visibleEmployees.filter(
+      (employee) => {
+        const record = getRecordForDate(
+          employee,
+          date,
+        )
 
-      return (
-        record?.clockIn?.status === "bad" ||
-        record?.clockOut?.status === "bad"
-      )
-    }).length,
+        return (
+          record?.clockIn?.status === "bad" ||
+          record?.clockOut?.status === "bad"
+        )
+      },
+    ).length,
 
     missing: visibleEmployees.filter(
-      (employee) => !getRecordForDate(employee, date)?.clockIn,
+      (employee) =>
+        !getRecordForDate(employee, date)
+          ?.clockIn,
     ).length,
   }
 
   return (
     <div className="min-h-svh bg-background">
-      <AppHeader role="manager" authenticated />
+      <AppHeader
+        role="manager"
+        authenticated
+      />
 
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
         <WorkflowBackLink
@@ -107,17 +137,30 @@ export default function ManagerDashboardPage() {
               <p className="text-2xl font-bold">
                 {visibleEmployees.length}
               </p>
+
               <p className="text-xs text-muted-foreground">
                 担当従業員
               </p>
             </CardContent>
           </Card>
 
-          {(["caution", "bad", "missing"] as const).map((item) => (
+          {(
+            [
+              "caution",
+              "bad",
+              "missing",
+            ] as const
+          ).map((item) => (
             <button
               key={item}
               type="button"
-              onClick={() => setFilter(filter === item ? null : item)}
+              onClick={() =>
+                setFilter(
+                  filter === item
+                    ? null
+                    : item,
+                )
+              }
               className={`rounded-xl border bg-card text-left transition-colors ${
                 filter === item
                   ? "border-primary ring-2 ring-primary/20"
@@ -144,7 +187,8 @@ export default function ManagerDashboardPage() {
 
               {filter && (
                 <Badge variant="outline">
-                  {filterLabels[filter]}のみ表示中
+                  {filterLabels[filter]}
+                  のみ表示中
                 </Badge>
               )}
             </CardTitle>
@@ -153,7 +197,9 @@ export default function ManagerDashboardPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setFilter(null)}
+                onClick={() =>
+                  setFilter(null)
+                }
               >
                 フィルター解除
               </Button>
