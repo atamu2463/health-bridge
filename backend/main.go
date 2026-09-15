@@ -47,6 +47,7 @@ func main() {
 	server := &http.Server{
 		Addr:              serverAddress,
 		Handler:           newRouter(),
+		ReadTimeout:       5 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
