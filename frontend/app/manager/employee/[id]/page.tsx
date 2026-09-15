@@ -111,11 +111,14 @@ export default function EmployeeDataPage({
                 この従業員は現在の担当一覧にいません。
               </p>
 
-              <Link href="/manager/dashboard">
-                <Button className="mt-4">
+              <Button
+                asChild
+                className="mt-4"
+              >
+                <Link href="/manager/dashboard">
                   一覧へ戻る
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </CardContent>
           </Card>
         </main>

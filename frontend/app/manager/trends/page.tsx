@@ -40,30 +40,53 @@ function countEntriesByStatus(entries: HealthEntry[]) {
   return Object.fromEntries(
     healthStatusOrder.map((status) => [
       status,
-      entries.filter((entry) => entry.status === status).length,
+      entries.filter(
+        (entry) => entry.status === status,
+      ).length,
     ]),
   ) as Record<HealthStatus, number>
 }
 
 export default function TeamTrendsPage() {
-  const { employees } = useMockApp()
+  const {
+    employees,
+    currentManager,
+    managerByEmployee,
+  } = useMockApp()
+
   const [checkinType, setCheckinType] =
     useState<CheckinType>("clockIn")
 
-  const entries = employees.flatMap((employee) =>
-    employee.records
-      .slice(0, 31)
-      .map((record) => record[checkinType])
-      .filter((entry): entry is HealthEntry => Boolean(entry)),
+  const managedEmployees = employees.filter(
+    (employee) =>
+      managerByEmployee[employee.id] ===
+      currentManager,
+  )
+
+  const entries = managedEmployees.flatMap(
+    (employee) =>
+      employee.records
+        .slice(0, 31)
+        .map((record) => record[checkinType])
+        .filter(
+          (entry): entry is HealthEntry =>
+            Boolean(entry),
+        ),
   )
 
   const entryCounts = countEntriesByStatus(entries)
+
   const selectedTypeLabel =
-    checkinType === "clockIn" ? "出勤時" : "退勤時"
+    checkinType === "clockIn"
+      ? "出勤時"
+      : "退勤時"
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader role="manager" authenticated />
+      <AppHeader
+        role="manager"
+        authenticated
+      />
 
       <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8">
         <div className="flex items-center justify-between gap-4">
@@ -80,10 +103,16 @@ export default function TeamTrendsPage() {
             <Button
               size="sm"
               variant={
-                checkinType === "clockIn" ? "default" : "outline"
+                checkinType === "clockIn"
+                  ? "default"
+                  : "outline"
               }
-              aria-pressed={checkinType === "clockIn"}
-              onClick={() => setCheckinType("clockIn")}
+              aria-pressed={
+                checkinType === "clockIn"
+              }
+              onClick={() =>
+                setCheckinType("clockIn")
+              }
             >
               出勤時
             </Button>
@@ -91,10 +120,16 @@ export default function TeamTrendsPage() {
             <Button
               size="sm"
               variant={
-                checkinType === "clockOut" ? "default" : "outline"
+                checkinType === "clockOut"
+                  ? "default"
+                  : "outline"
               }
-              aria-pressed={checkinType === "clockOut"}
-              onClick={() => setCheckinType("clockOut")}
+              aria-pressed={
+                checkinType === "clockOut"
+              }
+              onClick={() =>
+                setCheckinType("clockOut")
+              }
             >
               退勤時
             </Button>
@@ -116,8 +151,9 @@ export default function TeamTrendsPage() {
           <Card>
             <CardContent className="p-5">
               <p className="text-3xl font-bold">
-                {employees.length}
+                {managedEmployees.length}
               </p>
+
               <p className="text-sm text-muted-foreground">
                 対象従業員数
               </p>
@@ -129,6 +165,7 @@ export default function TeamTrendsPage() {
               <p className="text-3xl font-bold">
                 {entries.length}
               </p>
+
               <p className="text-sm text-muted-foreground">
                 記録数
               </p>
@@ -147,7 +184,10 @@ export default function TeamTrendsPage() {
             {healthStatusOrder.map((status) => {
               const percentage = entries.length
                 ? Math.round(
-                    (entryCounts[status] / entries.length) * 100,
+                    (
+                      entryCounts[status] /
+                      entries.length
+                    ) * 100,
                   )
                 : 0
 
@@ -158,15 +198,23 @@ export default function TeamTrendsPage() {
                 >
                   <div className="flex justify-between text-sm">
                     <span>
-                      {healthStatusConfig[status].label}
+                      {
+                        healthStatusConfig[status]
+                          .label
+                      }
                     </span>
-                    <strong>{percentage}%</strong>
+
+                    <strong>
+                      {percentage}%
+                    </strong>
                   </div>
 
                   <div className="h-3 overflow-hidden rounded-full bg-muted">
                     <div
                       className={`h-full rounded-full ${barColors[status]}`}
-                      style={{ width: `${percentage}%` }}
+                      style={{
+                        width: `${percentage}%`,
+                      }}
                     />
                   </div>
 
