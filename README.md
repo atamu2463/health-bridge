@@ -90,7 +90,7 @@ https://health-bridge-management.vercel.app/
 | フロントエンドプロトタイプ | 実装済み | 主要画面・操作フローをモックデータで確認可能 |
 | Docker開発環境 | 構築済み | Frontend / Backend / PostgreSQLをDocker Composeで構成 |
 | PostgreSQL | 接続処理実装済み | Go / GORMから接続する処理を実装 |
-| HTTPサーバー・Health Check API | 未実装 | バックエンド共通基盤として実装予定 |
+| HTTPサーバー・Health Check API | 実装済み | `GET /health` で稼働状態を確認可能 |
 | DBモデル・マイグレーション | 未実装 | 第2回レビュー後に確定仕様を反映予定 |
 | 業務API | 未実装 | 体調記録などの主要機能から順次実装予定 |
 | 認証・認可 | 未実装 | 管理者・従業員の権限制御を実装予定 |
