@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   BUSINESS_TIME_ZONE,
   getLocalDateKey,
+  getMillisecondsUntilNextBusinessDate,
   healthStatusConfig,
   type CheckinType,
   type HealthStatus,
@@ -37,18 +38,50 @@ export default function HealthInputPage() {
   const [currentDate, setCurrentDate] = useState<Date | null>(null)
 
   useEffect(() => {
-    const frameId = window.requestAnimationFrame(() => {
-      setCurrentDate(new Date())
-    })
+    let timeoutId: number | undefined
 
-    return () => window.cancelAnimationFrame(frameId)
+    function updateCurrentDate() {
+      const now = new Date()
+      setCurrentDate(now)
+
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId)
+      }
+
+      timeoutId = window.setTimeout(
+        updateCurrentDate,
+        getMillisecondsUntilNextBusinessDate(now) + 100,
+      )
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        updateCurrentDate()
+      }
+    }
+
+    const frameId = window.requestAnimationFrame(updateCurrentDate)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId)
+      }
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange,
+      )
+    }
   }, [])
 
   if (!currentDate) {
     return <HealthInputLoading />
   }
 
-  return <HealthInputForm currentDate={currentDate} />
+  const today = getLocalDateKey(currentDate)
+
+  return <HealthInputForm key={today} currentDate={currentDate} />
 }
 
 function HealthInputLoading() {
@@ -130,7 +163,9 @@ function HealthInputForm({ currentDate }: { currentDate: Date }) {
 
     setIsSubmitting(true)
 
-    addHealthEntry("1", today, type, {
+    const registrationDate = getLocalDateKey()
+
+    addHealthEntry("1", registrationDate, type, {
       status,
       comment: comment.trim(),
     })

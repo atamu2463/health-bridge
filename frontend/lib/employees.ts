@@ -39,6 +39,7 @@ const comments: Record<HealthStatus, string[]> = {
 }
 
 export const BUSINESS_TIME_ZONE = "Asia/Tokyo"
+const TOKYO_UTC_OFFSET_MILLISECONDS = 9 * 60 * 60 * 1000
 
 const businessDateFormatter = new Intl.DateTimeFormat("ja-JP", {
   timeZone: BUSINESS_TIME_ZONE,
@@ -61,10 +62,28 @@ export function getLocalDateKey(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
-function dateKey(daysAgo: number) {
-  const date = new Date()
-  date.setDate(date.getDate() - daysAgo)
-  return getLocalDateKey(date)
+// Asia/Tokyoには夏時間がないため、UTC+9から次の業務日付境界を求める。
+export function getMillisecondsUntilNextBusinessDate(referenceDate: Date) {
+  const [year, month, day] = getLocalDateKey(referenceDate)
+    .split("-")
+    .map(Number)
+  const nextMidnight =
+    Date.UTC(year, month - 1, day + 1) -
+    TOKYO_UTC_OFFSET_MILLISECONDS
+
+  return Math.max(nextMidnight - referenceDate.getTime(), 0)
+}
+
+function dateKey(referenceDate: Date, daysAgo: number) {
+  const [year, month, day] = getLocalDateKey(referenceDate)
+    .split("-")
+    .map(Number)
+
+  return new Date(
+    Date.UTC(year, month - 1, day - daysAgo),
+  )
+    .toISOString()
+    .slice(0, 10)
 }
 
 function makeEntry(status: HealthStatus, seed: number): HealthEntry {
@@ -72,21 +91,24 @@ function makeEntry(status: HealthStatus, seed: number): HealthEntry {
   return { status, comment: options[seed % options.length] }
 }
 
-function buildRecords(employeeIndex: number): DailyHealthRecord[] {
+function buildRecords(
+  employeeIndex: number,
+  referenceDate: Date,
+): DailyHealthRecord[] {
   return Array.from({ length: 31 }, (_, day) => {
     const clockInStatus = statuses[(day + employeeIndex) % statuses.length]
     const clockOutStatus = statuses[(day * 2 + employeeIndex + 1) % statuses.length]
     const clockInMissing = (day + employeeIndex) % 13 === 0
     const clockOutMissing = (day * 2 + employeeIndex) % 11 === 0
     return {
-      date: dateKey(day),
+      date: dateKey(referenceDate, day),
       ...(clockInMissing ? {} : { clockIn: makeEntry(clockInStatus, day + employeeIndex) }),
       ...(clockOutMissing ? {} : { clockOut: makeEntry(clockOutStatus, day + employeeIndex + 1) }),
     }
   })
 }
 
-export const allEmployeeAccounts: Employee[] = [
+const employeeAccountProfiles = [
   ["1", "山田 太郎", "yamada@company.com"],
   ["2", "佐藤 花子", "sato@company.com"],
   ["3", "田中 次郎", "tanaka@company.com"],
@@ -95,7 +117,17 @@ export const allEmployeeAccounts: Employee[] = [
   ["6", "伊藤 さくら", "ito@company.com"],
   ["7", "渡辺 大輔", "watanabe@company.com"],
   ["8", "中村 由美", "nakamura@company.com"],
-].map(([id, name, email], index) => ({ id, name, email, isActive: true, records: buildRecords(index) }))
+]
+
+export function createEmployeeAccounts(referenceDate: Date): Employee[] {
+  return employeeAccountProfiles.map(([id, name, email], index) => ({
+    id,
+    name,
+    email,
+    isActive: true,
+    records: buildRecords(index, referenceDate),
+  }))
+}
 
 export const initialRegisteredIds = ["1", "2", "3", "4", "5", "6", "7", "8"]
 
@@ -107,11 +139,13 @@ export function getRecordForDate(employee: Employee, date: string) {
   return employee.records.find((record) => record.date === date)
 }
 
-export function getRecentRecords(employee: Employee, days: number) {
-  const today = getLocalDateKey()
-  const startDate = new Date(`${today}T00:00:00+09:00`)
-  startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
-  const startDateKey = getLocalDateKey(startDate)
+export function getRecentRecords(
+  employee: Employee,
+  days: number,
+  referenceDate = new Date(),
+) {
+  const today = getLocalDateKey(referenceDate)
+  const startDateKey = dateKey(referenceDate, days - 1)
 
   // 固定幅のYYYY-MM-DDは辞書順と日付順が一致するため、日付オブジェクトへ変換不要
   return employee.records
@@ -121,11 +155,15 @@ export function getRecentRecords(employee: Employee, days: number) {
     .reverse()
 }
 
-export function searchEmployeeAccounts(name: string, email: string): Employee[] {
+export function searchEmployeeAccounts(
+  employeeAccounts: Employee[],
+  name: string,
+  email: string,
+): Employee[] {
   const normalizedName = name.trim().toLowerCase()
   const normalizedEmail = email.trim().toLowerCase()
   if (!normalizedName && !normalizedEmail) return []
-  return allEmployeeAccounts.filter((employee) => {
+  return employeeAccounts.filter((employee) => {
     const nameMatches = !normalizedName || employee.name.toLowerCase().includes(normalizedName)
     const emailMatches = !normalizedEmail || employee.email.toLowerCase().includes(normalizedEmail)
     return nameMatches && emailMatches

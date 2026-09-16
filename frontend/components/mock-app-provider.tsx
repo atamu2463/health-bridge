@@ -1,9 +1,9 @@
 "use client"
 
-import { createContext, useContext, useMemo, useState } from "react"
+import { createContext, useContext, useEffect, useMemo, useState } from "react"
 
 import {
-  allEmployeeAccounts,
+  createEmployeeAccounts,
   getLocalDateKey,
   initialRegisteredIds,
   type CheckinType,
@@ -53,11 +53,21 @@ export function MockAppProvider({
 }: {
   children: React.ReactNode
 }) {
-  const [employees, setEmployees] = useState(() =>
-    allEmployeeAccounts.filter((employee) =>
-      initialRegisteredIds.includes(employee.id),
-    ),
-  )
+  const [employees, setEmployees] = useState<Employee[]>([])
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      const employeeAccounts = createEmployeeAccounts(new Date())
+
+      setEmployees(
+        employeeAccounts.filter((employee) =>
+          initialRegisteredIds.includes(employee.id),
+        ),
+      )
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [])
 
   const [managerByEmployee, setManagerByEmployee] = useState<
     Record<string, string>

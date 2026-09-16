@@ -13,7 +13,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { searchEmployeeAccounts, allEmployeeAccounts, type Employee } from "@/lib/employees"
+import {
+  createEmployeeAccounts,
+  searchEmployeeAccounts,
+  type Employee,
+} from "@/lib/employees"
 
 interface AddEmployeeDialogProps {
   registeredIds: string[]
@@ -29,13 +33,15 @@ export function AddEmployeeDialog({ registeredIds, onAdd }: AddEmployeeDialogPro
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
-    const found = searchEmployeeAccounts(name, email)
+    const referenceDate = new Date()
+    const employeeAccounts = createEmployeeAccounts(referenceDate)
+    const found = searchEmployeeAccounts(employeeAccounts, name, email)
 
     // ▼▼▼ [DEMO] 検索結果の表示イメージ確認用ダミー表示 ▼▼▼
     // 検索結果が0件でも、全ダミーアカウントを表示して結果レイアウトを確認できるようにしています。
     // 【本番実装時はこの if ブロックを丸ごと削除してください】（下の setResults(found) だけ残す）
     if (found.length === 0) {
-      setResults(allEmployeeAccounts)
+      setResults(employeeAccounts)
       setSearched(true)
       return
     }

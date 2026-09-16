@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { CalendarDays } from "lucide-react"
 
 import { AppHeader } from "@/components/app-header"
@@ -37,12 +37,22 @@ export default function ManagerDashboardPage() {
     managerByEmployee,
   } = useMockApp()
 
-  const [date, setDate] = useState(() =>
-    getLocalDateKey(),
-  )
+  const [date, setDate] = useState<string | null>(null)
 
   const [filter, setFilter] =
     useState<StatusFilter>(null)
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      setDate(getLocalDateKey())
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [])
+
+  if (!date) {
+    return <ManagerDashboardLoading />
+  }
 
   const visibleEmployees = employees.filter(
     (employee) =>
@@ -161,6 +171,7 @@ export default function ManagerDashboardPage() {
                     : item,
                 )
               }
+              aria-pressed={filter === item}
               className={`rounded-xl border bg-card text-left transition-colors ${
                 filter === item
                   ? "border-primary ring-2 ring-primary/20"
@@ -214,6 +225,37 @@ export default function ManagerDashboardPage() {
             />
           </CardContent>
         </Card>
+      </main>
+    </div>
+  )
+}
+
+function ManagerDashboardLoading() {
+  return (
+    <div className="min-h-svh bg-background">
+      <AppHeader
+        role="manager"
+        authenticated
+      />
+
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
+        <WorkflowBackLink
+          href="/manager/menu"
+          label="メニューへ戻る"
+        />
+
+        <div>
+          <h1 className="text-xl font-bold sm:text-2xl">
+            担当従業員の体調
+          </h1>
+
+          <p
+            className="mt-1 text-sm text-muted-foreground"
+            role="status"
+          >
+            日付を確認しています...
+          </p>
+        </div>
       </main>
     </div>
   )
