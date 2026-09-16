@@ -6,7 +6,7 @@ HealthBridgeは、Next.jsで構築したフロントエンド、Goで構築す�
 
 開発環境ではDocker Composeを使用し、フロントエンド・バックエンド・PostgreSQLをそれぞれ独立したコンテナとして構成します。
 
-現在はフロントエンドの画面プロトタイプと、Go / GORMからPostgreSQLへ接続するためのバックエンド基盤まで実装しています。業務API、認証・認可、DBモデル・マイグレーションについては、第2回スタッフレビューでMVP仕様を確認した後に実装する予定です。
+現在はフロントエンドの画面プロトタイプと、Go / GORMからPostgreSQLへ接続するためのバックエンド基盤、HTTPサーバー、Health Check APIまで実装しています。業務API、認証・認可、DBモデル・マイグレーションについては、第2回スタッフレビューでMVP仕様を確認した後に実装する予定です。
 
 ## 2. システム構成
 
@@ -31,7 +31,8 @@ HealthBridgeは、Next.jsで構築したフロントエンド、Goで構築す�
 │ Backend             │
 │ Go                  │
 │ GORM                │
-│ REST API（実装予定）│
+│ Health Check API    │
+│ 業務API（実装予定）   │
 └──────────┬──────────┘
            │
            │ SQL / GORM
@@ -76,7 +77,7 @@ HealthBridgeは、Next.jsで構築したフロントエンド、Goで構築す�
 
 バックエンドにはGoを使用し、PostgreSQLとの接続にはGORMを使用します。
 
-現時点ではGo / GORMからPostgreSQLへ接続する処理まで実装しており、HTTPサーバー・業務APIは未実装です。
+現時点ではGo / GORMからPostgreSQLへ接続する処理、HTTPサーバー、Health Check API（`GET /health`）まで実装しており、業務APIは未実装です。
 
 ### 3.3 データベース
 
@@ -108,7 +109,8 @@ HealthBridgeは、Next.jsで構築したフロントエンド、Goで構築す�
 | フロントエンド | 実装済み | 主要画面・操作フローをモックデータで確認可能 |
 | Docker Compose | 構築済み | Frontend / Backend / PostgreSQLの開発環境を構成 |
 | PostgreSQL | 接続処理実装済み | Go / GORMから接続する処理を実装 |
-| HTTPサーバー | 未実装 | バックエンド共通基盤として実装予定 |
+| HTTPサーバー | 実装済み | GoのHTTPサーバーを実装 |
+| Health Check API | 実装済み | `GET /health`でHTTPプロセスの稼働状態を確認可能 |
 | DBモデル | 設計済み・未実装 | `users` / `health_records` / `roles` / `conditions`を設計 |
 | マイグレーション | 未実装 | MVP仕様確定後にGORMで実装予定 |
 | 業務API | 設計済み・未実装 | 体調記録・従業員管理などのAPIを設計 |
@@ -123,11 +125,10 @@ HealthBridgeは、Next.jsで構築したフロントエンド、Goで構築す�
 第2回スタッフレビューでMVP仕様を確認した後、以下の順序でバックエンド実装を進めます。
 
 1. レビュー結果を要件・DB・API設計へ反映する
-2. HTTPサーバーとHealth Check APIを実装する
-3. GORMによるDBモデル・マイグレーションを実装する
-4. 体調記録など、主要な業務APIを実装する
-5. 認証・認可とアクセス制御を実装する
-6. フロントエンドをバックエンドAPIへ接続する
-7. テストとGitHub ActionsによるCIを整備する
+2. GORMによるDBモデル・マイグレーションを実装する
+3. 体調記録など、主要な業務APIを実装する
+4. 認証・認可とアクセス制御を実装する
+5. フロントエンドをバックエンドAPIへ接続する
+6. テストとGitHub ActionsによるCIを整備する
 
 実装では、画面単位で必要な機能をまとめて実装・確認し、フロントエンドからデータベースまで一連の処理が動作する状態を段階的に増やしていく方針です。

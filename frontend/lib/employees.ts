@@ -38,18 +38,52 @@ const comments: Record<HealthStatus, string[]> = {
   bad: ["体調が悪く業務量を調整したいです", "強い疲労感があり休憩が必要です"],
 }
 
+export const BUSINESS_TIME_ZONE = "Asia/Tokyo"
+const TOKYO_UTC_OFFSET_MILLISECONDS = 9 * 60 * 60 * 1000
+
+const businessDateFormatter = new Intl.DateTimeFormat("ja-JP", {
+  timeZone: BUSINESS_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+
+// バックエンド接続前の暫定仕様。体調記録の業務日付は日本時間を基準にする。
 export function getLocalDateKey(date = new Date()) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
+  const dateParts = businessDateFormatter.formatToParts(date)
+  const year = dateParts.find((part) => part.type === "year")?.value
+  const month = dateParts.find((part) => part.type === "month")?.value
+  const day = dateParts.find((part) => part.type === "day")?.value
+
+  if (!year || !month || !day) {
+    throw new Error("業務日付の生成に失敗しました")
+  }
 
   return `${year}-${month}-${day}`
 }
 
-function dateKey(daysAgo: number) {
-  const date = new Date()
-  date.setDate(date.getDate() - daysAgo)
-  return getLocalDateKey(date)
+// Asia/Tokyoには夏時間がないため、UTC+9から次の業務日付境界を求める。
+export function getMillisecondsUntilNextBusinessDate(referenceDate: Date) {
+  const [year, month, day] = getLocalDateKey(referenceDate)
+    .split("-")
+    .map(Number)
+  const nextMidnight =
+    Date.UTC(year, month - 1, day + 1) -
+    TOKYO_UTC_OFFSET_MILLISECONDS
+
+  return Math.max(nextMidnight - referenceDate.getTime(), 0)
+}
+
+function dateKey(referenceDate: Date, daysAgo: number) {
+  const [year, month, day] = getLocalDateKey(referenceDate)
+    .split("-")
+    .map(Number)
+
+  return new Date(
+    Date.UTC(year, month - 1, day - daysAgo),
+  )
+    .toISOString()
+    .slice(0, 10)
 }
 
 function makeEntry(status: HealthStatus, seed: number): HealthEntry {
@@ -57,21 +91,24 @@ function makeEntry(status: HealthStatus, seed: number): HealthEntry {
   return { status, comment: options[seed % options.length] }
 }
 
-function buildRecords(employeeIndex: number): DailyHealthRecord[] {
+function buildRecords(
+  employeeIndex: number,
+  referenceDate: Date,
+): DailyHealthRecord[] {
   return Array.from({ length: 31 }, (_, day) => {
     const clockInStatus = statuses[(day + employeeIndex) % statuses.length]
     const clockOutStatus = statuses[(day * 2 + employeeIndex + 1) % statuses.length]
     const clockInMissing = (day + employeeIndex) % 13 === 0
     const clockOutMissing = (day * 2 + employeeIndex) % 11 === 0
     return {
-      date: dateKey(day),
+      date: dateKey(referenceDate, day),
       ...(clockInMissing ? {} : { clockIn: makeEntry(clockInStatus, day + employeeIndex) }),
       ...(clockOutMissing ? {} : { clockOut: makeEntry(clockOutStatus, day + employeeIndex + 1) }),
     }
   })
 }
 
-export const allEmployeeAccounts: Employee[] = [
+const employeeAccountProfiles = [
   ["1", "山田 太郎", "yamada@company.com"],
   ["2", "佐藤 花子", "sato@company.com"],
   ["3", "田中 次郎", "tanaka@company.com"],
@@ -80,7 +117,17 @@ export const allEmployeeAccounts: Employee[] = [
   ["6", "伊藤 さくら", "ito@company.com"],
   ["7", "渡辺 大輔", "watanabe@company.com"],
   ["8", "中村 由美", "nakamura@company.com"],
-].map(([id, name, email], index) => ({ id, name, email, isActive: true, records: buildRecords(index) }))
+]
+
+export function createEmployeeAccounts(referenceDate: Date): Employee[] {
+  return employeeAccountProfiles.map(([id, name, email], index) => ({
+    id,
+    name,
+    email,
+    isActive: true,
+    records: buildRecords(index, referenceDate),
+  }))
+}
 
 export const initialRegisteredIds = ["1", "2", "3", "4", "5", "6", "7", "8"]
 
@@ -92,15 +139,31 @@ export function getRecordForDate(employee: Employee, date: string) {
   return employee.records.find((record) => record.date === date)
 }
 
-export function getRecentRecords(employee: Employee, days: number) {
-  return employee.records.slice(0, days).reverse()
+export function getRecentRecords(
+  employee: Employee,
+  days: number,
+  referenceDate = new Date(),
+) {
+  const today = getLocalDateKey(referenceDate)
+  const startDateKey = dateKey(referenceDate, days - 1)
+
+  // 固定幅のYYYY-MM-DDは辞書順と日付順が一致するため、日付オブジェクトへ変換不要
+  return employee.records
+    .filter(
+      (record) => record.date >= startDateKey && record.date <= today,
+    )
+    .reverse()
 }
 
-export function searchEmployeeAccounts(name: string, email: string): Employee[] {
+export function searchEmployeeAccounts(
+  employeeAccounts: Employee[],
+  name: string,
+  email: string,
+): Employee[] {
   const normalizedName = name.trim().toLowerCase()
   const normalizedEmail = email.trim().toLowerCase()
   if (!normalizedName && !normalizedEmail) return []
-  return allEmployeeAccounts.filter((employee) => {
+  return employeeAccounts.filter((employee) => {
     const nameMatches = !normalizedName || employee.name.toLowerCase().includes(normalizedName)
     const emailMatches = !normalizedEmail || employee.email.toLowerCase().includes(normalizedEmail)
     return nameMatches && emailMatches
