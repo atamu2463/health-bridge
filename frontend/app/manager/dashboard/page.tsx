@@ -50,7 +50,7 @@ export default function ManagerDashboardPage() {
     return () => window.cancelAnimationFrame(frameId)
   }, [])
 
-  if (!date) {
+  if (date === null) {
     return <ManagerDashboardLoading />
   }
 
