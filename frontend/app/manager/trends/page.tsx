@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
+  getRecentRecords,
   healthStatusConfig,
   type CheckinType,
   type HealthEntry,
@@ -65,8 +66,7 @@ export default function TeamTrendsPage() {
 
   const entries = managedEmployees.flatMap(
     (employee) =>
-      employee.records
-        .slice(0, 31)
+      getRecentRecords(employee, 31)
         .map((record) => record[checkinType])
         .filter(
           (entry): entry is HealthEntry =>

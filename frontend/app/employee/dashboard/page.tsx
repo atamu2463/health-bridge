@@ -54,7 +54,11 @@ export default function ReflectionPage() {
             label="メニューへ戻る"
           />
 
-          <div className="flex gap-2">
+          <div
+            className="flex gap-2"
+            role="group"
+            aria-label="表示期間"
+          >
             <Button
               size="sm"
               variant={
@@ -62,6 +66,7 @@ export default function ReflectionPage() {
                   ? "default"
                   : "outline"
               }
+              aria-pressed={period === 7}
               onClick={() =>
                 setPeriod(7)
               }
@@ -76,6 +81,7 @@ export default function ReflectionPage() {
                   ? "default"
                   : "outline"
               }
+              aria-pressed={period === 31}
               onClick={() =>
                 setPeriod(31)
               }
