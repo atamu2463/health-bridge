@@ -38,10 +38,25 @@ const comments: Record<HealthStatus, string[]> = {
   bad: ["体調が悪く業務量を調整したいです", "強い疲労感があり休憩が必要です"],
 }
 
+export const BUSINESS_TIME_ZONE = "Asia/Tokyo"
+
+const businessDateFormatter = new Intl.DateTimeFormat("ja-JP", {
+  timeZone: BUSINESS_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+
+// バックエンド接続前の暫定仕様。体調記録の業務日付は日本時間を基準にする。
 export function getLocalDateKey(date = new Date()) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
+  const dateParts = businessDateFormatter.formatToParts(date)
+  const year = dateParts.find((part) => part.type === "year")?.value
+  const month = dateParts.find((part) => part.type === "month")?.value
+  const day = dateParts.find((part) => part.type === "day")?.value
+
+  if (!year || !month || !day) {
+    throw new Error("業務日付の生成に失敗しました")
+  }
 
   return `${year}-${month}-${day}`
 }
@@ -93,7 +108,17 @@ export function getRecordForDate(employee: Employee, date: string) {
 }
 
 export function getRecentRecords(employee: Employee, days: number) {
-  return employee.records.slice(0, days).reverse()
+  const today = getLocalDateKey()
+  const startDate = new Date(`${today}T00:00:00+09:00`)
+  startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
+  const startDateKey = getLocalDateKey(startDate)
+
+  // 固定幅のYYYY-MM-DDは辞書順と日付順が一致するため、日付オブジェクトへ変換不要
+  return employee.records
+    .filter(
+      (record) => record.date >= startDateKey && record.date <= today,
+    )
+    .reverse()
 }
 
 export function searchEmployeeAccounts(name: string, email: string): Employee[] {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Check, Clock3, LogIn, LogOut } from "lucide-react"
 
@@ -18,6 +18,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  BUSINESS_TIME_ZONE,
   getLocalDateKey,
   healthStatusConfig,
   type CheckinType,
@@ -33,13 +34,59 @@ const statuses: HealthStatus[] = [
 ]
 
 export default function HealthInputPage() {
+  const [currentDate, setCurrentDate] = useState<Date | null>(null)
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      setCurrentDate(new Date())
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [])
+
+  if (!currentDate) {
+    return <HealthInputLoading />
+  }
+
+  return <HealthInputForm currentDate={currentDate} />
+}
+
+function HealthInputLoading() {
+  return (
+    <div className="min-h-svh bg-background">
+      <AppHeader role="employee" authenticated />
+
+      <main className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-10">
+        <WorkflowBackLink
+          href="/employee/menu"
+          label="メニューへ戻る"
+        />
+
+        <div>
+          <h1 className="text-xl font-bold sm:text-2xl">
+            今日の体調を入力
+          </h1>
+
+          <p
+            className="mt-1 text-sm text-muted-foreground"
+            role="status"
+          >
+            日付を確認しています...
+          </p>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+function HealthInputForm({ currentDate }: { currentDate: Date }) {
   const router = useRouter()
   const { employees, addHealthEntry } = useMockApp()
 
-  const currentDate = new Date()
   const today = getLocalDateKey(currentDate)
 
   const displayDate = currentDate.toLocaleDateString("ja-JP", {
+    timeZone: BUSINESS_TIME_ZONE,
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -126,6 +173,7 @@ export default function HealthInputPage() {
                 key={item}
                 onClick={() => chooseType(item)}
                 disabled={saved[item]}
+                aria-pressed={isActive}
                 className={`flex items-center justify-between rounded-xl border p-4 text-left transition-colors ${
                   isActive
                     ? "border-primary bg-primary/5 ring-2 ring-primary/20"
@@ -208,6 +256,7 @@ export default function HealthInputPage() {
                             setStatus(item)
                             setError(false)
                           }}
+                          aria-pressed={selected}
                           className={`min-h-20 rounded-xl border px-2 py-3 text-sm font-semibold transition-colors ${
                             selected
                               ? `${config.className} ring-2 ring-current/20`
