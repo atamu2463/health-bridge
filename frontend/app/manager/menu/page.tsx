@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import {
-  BarChart3,
   ClipboardPlus,
   HeartPulse,
 } from "lucide-react"
@@ -23,13 +22,6 @@ const menuItems = [
     title: "担当従業員の体調を確認",
     description:
       "指定日の出勤時・退勤時の体調を一覧で確認します",
-  },
-  {
-    href: "/manager/trends",
-    icon: BarChart3,
-    title: "チームの体調傾向",
-    description:
-      "直近1か月の回答割合を出勤時・退勤時で確認します",
   },
   {
     href: "/manager/employee/create",
@@ -59,7 +51,7 @@ export default function ManagerMenuPage() {
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           {menuItems.map((item) => (
             <Link
               key={item.href}
