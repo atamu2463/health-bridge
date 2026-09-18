@@ -61,7 +61,7 @@ PostgreSQL
 
 | API ID | メソッド | パス | 目的 | 役割・データ範囲 | 関連機能 |
 | --- | --- | --- | --- | --- | --- |
-| API-01 | `POST` | `/api/managers` | managerアカウントを作成 | 認証不要とする設計案。利用運用は要確認 | F-01 |
+| API-01 | `POST` | `/api/managers` | managerアカウントを作成 | manager本人が登録。登録資格の確認方法は本番API実装前に決定 | F-01 |
 | API-02 | `POST` | `/api/auth/login` | メールアドレスとパスワードでログイン | 認証不要 | F-02 |
 | API-03 | `POST` | `/api/auth/logout` | ログイン状態を終了 | ログイン済みユーザー | F-02 |
 | API-04 | `POST` | `/api/employees` | employeeを作成し、実行者を担当managerに設定 | managerのみ | F-03 |
@@ -70,7 +70,7 @@ PostgreSQL
 | API-07 | `PATCH` | `/api/employees/{employeeId}/deactivate` | employeeを物理削除せず無効化 | managerのみ・自身の担当employeeに限定 | F-13 |
 | API-08 | `POST` | `/api/health-records` | 出勤時または退勤時の体調を登録 | employeeのみ・本人の記録 | F-04 |
 | API-09 | `GET` | `/api/health-records?period=week\|month` | 本人の体調記録を期間指定で取得 | employeeのみ・本人の記録 | F-05, F-06 |
-| API-10 | `GET` | `/api/managed-employees?date=YYYY-MM-DD&filter=...` | 指定日の担当employee一覧と体調を取得 | managerのみ・自身の担当employee | F-07, F-08 |
+| API-10 | `GET` | `/api/managed-employees?date=YYYY-MM-DD&filter=...` | 指定日の担当employee一覧と体調を取得 | managerのみ・自身の担当employeeかつ `is_active = true` のemployeeに限定 | F-07, F-08 |
 | API-11 | `GET` | `/api/managed-employees/{employeeId}/health-records` | 担当employeeの体調履歴を取得 | managerのみ・自身の担当employeeに限定 | F-09 |
 | API-12 | `GET` | `/api/managers` | 担当変更先となる有効manager一覧を取得 | managerのみ | F-10 |
 | API-13 | `PATCH` | `/api/managed-employees/{employeeId}/manager` | 担当employeeを別managerへ引き継ぐ | managerのみ・現在の担当managerに限定 | F-10 |
