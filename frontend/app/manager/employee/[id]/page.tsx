@@ -275,6 +275,7 @@ export default function EmployeeDataPage({
           <CardContent>
             <HealthChart
               records={records}
+              days={period}
             />
           </CardContent>
         </Card>
