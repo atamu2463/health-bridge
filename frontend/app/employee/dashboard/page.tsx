@@ -111,6 +111,7 @@ export default function ReflectionPage() {
           <CardContent>
             <HealthChart
               records={records}
+              days={period}
             />
           </CardContent>
         </Card>
