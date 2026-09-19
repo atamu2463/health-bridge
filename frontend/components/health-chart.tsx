@@ -493,7 +493,10 @@ export function HealthChart({
           </div>
         </div>
       ) : (
-        <div className="flex h-64 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+        <div
+          role="status"
+          className="flex h-64 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground"
+        >
           表示する記録を選択してください
         </div>
       )}
