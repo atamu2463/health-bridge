@@ -46,7 +46,7 @@
 - Issueに対応した専用ブランチを使用する。
 - 機能変更と機械的な整形を同じPRへ混在させない。
 - Formatterによる変更と、リファクタリングや挙動変更を同じコミットへ含めない。
-- commit、push、Issue作成、PR作成、Resolve、マージは、ユーザーから明示的な指示がある場合のみ行う。
+- commit、push、Issue・PRに対する操作は、ユーザーから明示的な指示がある場合のみ行う。
 - ユーザーが作成した変更や既存差分を勝手に戻さない。
 - `git reset --hard`、強制pushなどのdestructiveなGit操作を行わない。
 - PRには、変更理由、変更内容、検証結果、未確認事項を記載する。
@@ -117,7 +117,7 @@ npm run build
 
 ```bash
 cd backend
-gofmt -w <変更したGoファイル>
+gofmt -w path/to/changed.go
 go test ./...
 go vet ./...
 ```
