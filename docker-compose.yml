@@ -33,17 +33,16 @@ services:
       - ./backend:/backend
 
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8080}:${BACKEND_PORT:-8080}"
 
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      PORT: ${BACKEND_PORT:-8080}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
 
     depends_on:
       db:
         condition: service_healthy
-
-    command: go run .
-
 
   frontend:
     container_name: frontend
