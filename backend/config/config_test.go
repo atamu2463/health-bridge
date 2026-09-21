@@ -44,6 +44,18 @@ func TestLoadUsesDefaultPort(t *testing.T) {
 	}
 }
 
+func TestLoadDatabaseURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://user:password@db:5432/health_bridge")
+
+	databaseURL, err := LoadDatabaseURL()
+	if err != nil {
+		t.Fatalf("LoadDatabaseURL() error = %v", err)
+	}
+	if databaseURL != "postgresql://user:password@db:5432/health_bridge" {
+		t.Fatal("LoadDatabaseURL() が環境変数の値と一致しません")
+	}
+}
+
 func TestLoadRejectsInvalidConfiguration(t *testing.T) {
 	tests := []struct {
 		name           string
