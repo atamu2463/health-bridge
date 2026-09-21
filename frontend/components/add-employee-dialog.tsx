@@ -24,7 +24,10 @@ interface AddEmployeeDialogProps {
   onAdd: (employee: Employee) => void
 }
 
-export function AddEmployeeDialog({ registeredIds, onAdd }: AddEmployeeDialogProps) {
+export function AddEmployeeDialog({
+  registeredIds,
+  onAdd,
+}: AddEmployeeDialogProps) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -122,8 +125,12 @@ export function AddEmployeeDialog({ registeredIds, onAdd }: AddEmployeeDialogPro
                   className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5"
                 >
                   <div className="flex flex-col gap-0.5 min-w-0">
-                    <span className="text-sm font-medium text-foreground truncate">{employee.name}</span>
-                    <span className="text-xs text-muted-foreground truncate">{employee.email}</span>
+                    <span className="text-sm font-medium text-foreground truncate">
+                      {employee.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground truncate">
+                      {employee.email}
+                    </span>
                   </div>
                   {alreadyRegistered ? (
                     <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
@@ -131,7 +138,11 @@ export function AddEmployeeDialog({ registeredIds, onAdd }: AddEmployeeDialogPro
                       登録済み
                     </span>
                   ) : (
-                    <Button size="sm" className="shrink-0" onClick={() => handleAdd(employee)}>
+                    <Button
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => handleAdd(employee)}
+                    >
                       登録する
                     </Button>
                   )}

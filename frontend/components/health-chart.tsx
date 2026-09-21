@@ -24,12 +24,7 @@ import {
 // 「普通」を中央の0として定義したscoreを、
 // グラフのY軸表示用ラベルへ変換する。
 const scoreLabel = Object.fromEntries(
-  Object.values(healthStatusConfig).map(
-    (value) => [
-      value.score,
-      value.label,
-    ],
-  ),
+  Object.values(healthStatusConfig).map((value) => [value.score, value.label]),
 )
 
 type SeriesKey = "clockIn" | "clockOut"
@@ -54,66 +49,44 @@ type ClockOutDotProps = DotProps & {
   value?: number | null
 }
 
-function getDateKey(
-  referenceDate: Date,
-  daysAgo: number,
-) {
-  const [year, month, day] = getLocalDateKey(
-    referenceDate,
-  )
+function getDateKey(referenceDate: Date, daysAgo: number) {
+  const [year, month, day] = getLocalDateKey(referenceDate)
     .split("-")
     .map(Number)
 
-  return new Date(
-    Date.UTC(year, month - 1, day - daysAgo),
-  )
+  return new Date(Date.UTC(year, month - 1, day - daysAgo))
     .toISOString()
     .slice(0, 10)
 }
 
 function formatDate(date: string) {
-  return new Date(
-    `${date}T00:00:00`,
-  ).toLocaleDateString("ja-JP", {
+  return new Date(`${date}T00:00:00`).toLocaleDateString("ja-JP", {
     month: "numeric",
     day: "numeric",
   })
 }
 
-function buildChartData(
-  records: DailyHealthRecord[],
-  days: number,
-) {
+function buildChartData(records: DailyHealthRecord[], days: number) {
   const referenceDate = new Date()
-  const recordsByDate = new Map(
-    records.map((record) => [record.date, record]),
-  )
+  const recordsByDate = new Map(records.map((record) => [record.date, record]))
 
   return Array.from({ length: days }, (_, index) => {
-    const date = getDateKey(
-      referenceDate,
-      days - index - 1,
-    )
+    const date = getDateKey(referenceDate, days - index - 1)
     const record = recordsByDate.get(date)
 
     return {
       date,
       clockIn: record?.clockIn
-        ? healthStatusConfig[record.clockIn.status]
-            .score
+        ? healthStatusConfig[record.clockIn.status].score
         : null,
       clockOut: record?.clockOut
-        ? healthStatusConfig[record.clockOut.status]
-            .score
+        ? healthStatusConfig[record.clockOut.status].score
         : null,
     }
   }) satisfies ChartDataPoint[]
 }
 
-function findMissingConnections(
-  data: ChartDataPoint[],
-  series: SeriesKey,
-) {
+function findMissingConnections(data: ChartDataPoint[], series: SeriesKey) {
   const connections: MissingConnection[] = []
   let previousRecordedIndex: number | undefined
 
@@ -129,8 +102,7 @@ function findMissingConnections(
       previousRecordedIndex !== undefined &&
       index - previousRecordedIndex > 1
     ) {
-      const previousPoint =
-        data[previousRecordedIndex]
+      const previousPoint = data[previousRecordedIndex]
       const previousValue = previousPoint[series]
 
       if (previousValue !== null) {
@@ -150,11 +122,7 @@ function findMissingConnections(
   return connections
 }
 
-function ClockOutDot({
-  cx,
-  cy,
-  value,
-}: ClockOutDotProps) {
+function ClockOutDot({ cx, cy, value }: ClockOutDotProps) {
   // Rechartsは欠測点もcustom dotへ渡すため、退勤系列自身の値と座標を検証する。
   if (
     value == null ||
@@ -193,18 +161,13 @@ export function HealthChart({
     clockOut: true,
   })
   const data = buildChartData(records, days)
-  const clockInMissingConnections =
-    findMissingConnections(data, "clockIn")
-  const clockOutMissingConnections =
-    findMissingConnections(data, "clockOut")
+  const clockInMissingConnections = findMissingConnections(data, "clockIn")
+  const clockOutMissingConnections = findMissingConnections(data, "clockOut")
 
   const hasHealthData = records.some(
-    (record) =>
-      record.clockIn ||
-      record.clockOut,
+    (record) => record.clockIn || record.clockOut,
   )
-  const hasVisibleSeries =
-    visibleSeries.clockIn || visibleSeries.clockOut
+  const hasVisibleSeries = visibleSeries.clockIn || visibleSeries.clockOut
   const isMonthly = days > 10
 
   if (!hasHealthData) {
@@ -216,14 +179,9 @@ export function HealthChart({
   }
 
   return (
-    <div
-      className="w-full"
-      aria-label="出勤時と退勤時の体調推移グラフ"
-    >
+    <div className="w-full" aria-label="出勤時と退勤時の体調推移グラフ">
       <fieldset className="mb-4 flex flex-wrap items-center gap-4">
-        <legend className="sr-only">
-          表示する記録
-        </legend>
+        <legend className="sr-only">表示する記録</legend>
 
         <div className="flex items-center gap-2">
           <Checkbox
@@ -237,10 +195,7 @@ export function HealthChart({
             }
           />
 
-          <Label
-            htmlFor={`${chartId}-clock-in`}
-            className="cursor-pointer"
-          >
+          <Label htmlFor={`${chartId}-clock-in`} className="cursor-pointer">
             出勤時
           </Label>
         </div>
@@ -257,10 +212,7 @@ export function HealthChart({
             }
           />
 
-          <Label
-            htmlFor={`${chartId}-clock-out`}
-            className="cursor-pointer"
-          >
+          <Label htmlFor={`${chartId}-clock-out`} className="cursor-pointer">
             退勤時
           </Label>
         </div>
@@ -283,39 +235,20 @@ export function HealthChart({
               ? "max-w-full overflow-x-auto overscroll-x-contain pb-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:overflow-x-visible lg:pb-0"
               : "max-w-full"
         }
-        role={
-          isMonthly && hasVisibleSeries
-            ? "region"
-            : undefined
-        }
+        role={isMonthly && hasVisibleSeries ? "region" : undefined}
         aria-label={
-          isMonthly && hasVisibleSeries
-            ? "1か月の体調推移グラフ"
-            : undefined
+          isMonthly && hasVisibleSeries ? "1か月の体調推移グラフ" : undefined
         }
         aria-describedby={
-          isMonthly && hasVisibleSeries
-            ? `${chartId}-scroll-guide`
-            : undefined
+          isMonthly && hasVisibleSeries ? `${chartId}-scroll-guide` : undefined
         }
-        tabIndex={
-          isMonthly && hasVisibleSeries ? 0 : undefined
-        }
+        tabIndex={isMonthly && hasVisibleSeries ? 0 : undefined}
       >
-        <div
-          className={
-            isMonthly
-              ? "h-80 min-w-[1100px] lg:min-w-0"
-              : "h-80"
-          }
-        >
+        <div className={isMonthly ? "h-80 min-w-[1100px] lg:min-w-0" : "h-80"}>
           {/* 31日×約32pxにY軸と余白を加え、狭い画面でも日ごとの間隔を保つ。 */}
           {/* 非表示時は親の寸法が0になるため、ResponsiveContainer自体を描画しない。 */}
           {hasVisibleSeries && (
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-            >
+            <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={data}
                 margin={{
@@ -325,68 +258,42 @@ export function HealthChart({
                   bottom: 8,
                 }}
               >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
 
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11 }}
                   tickFormatter={formatDate}
-                  interval={
-                    days > 10
-                      ? 4
-                      : 0
-                  }
+                  interval={days > 10 ? 4 : 0}
                 />
 
                 <YAxis
                   domain={[-2, 2]}
-                  ticks={[
-                    -2,
-                    -1,
-                    0,
-                    1,
-                    2,
-                  ]}
-                  tickFormatter={(value) =>
-                    scoreLabel[value]
-                  }
+                  ticks={[-2, -1, 0, 1, 2]}
+                  tickFormatter={(value) => scoreLabel[value]}
                   width={78}
                   tick={{ fontSize: 11 }}
                 />
 
                 <Tooltip
                   formatter={(value, name) => [
-                    scoreLabel[
-                      Number(value)
-                    ],
-                    name === "clockIn"
-                      ? "出勤時"
-                      : "退勤時",
+                    scoreLabel[Number(value)],
+                    name === "clockIn" ? "出勤時" : "退勤時",
                   ]}
-                  labelFormatter={(value) =>
-                    formatDate(String(value))
-                  }
+                  labelFormatter={(value) => formatDate(String(value))}
                 />
 
                 {visibleSeries.clockIn && (
                   <>
-                    {clockInMissingConnections.map(
-                      (connection, index) => (
-                        <ReferenceLine
-                          key={`clockIn-missing-${index}`}
-                          segment={[
-                            connection.start,
-                            connection.end,
-                          ]}
-                          stroke={seriesColors.clockIn}
-                          strokeWidth={2.5}
-                          strokeDasharray="5 4"
-                        />
-                      ),
-                    )}
+                    {clockInMissingConnections.map((connection, index) => (
+                      <ReferenceLine
+                        key={`clockIn-missing-${index}`}
+                        segment={[connection.start, connection.end]}
+                        stroke={seriesColors.clockIn}
+                        strokeWidth={2.5}
+                        strokeDasharray="5 4"
+                      />
+                    ))}
 
                     <Line
                       type="monotone"
@@ -406,20 +313,15 @@ export function HealthChart({
 
                 {visibleSeries.clockOut && (
                   <>
-                    {clockOutMissingConnections.map(
-                      (connection, index) => (
-                        <ReferenceLine
-                          key={`clockOut-missing-${index}`}
-                          segment={[
-                            connection.start,
-                            connection.end,
-                          ]}
-                          stroke={seriesColors.clockOut}
-                          strokeWidth={2.5}
-                          strokeDasharray="5 4"
-                        />
-                      ),
-                    )}
+                    {clockOutMissingConnections.map((connection, index) => (
+                      <ReferenceLine
+                        key={`clockOut-missing-${index}`}
+                        segment={[connection.start, connection.end]}
+                        stroke={seriesColors.clockOut}
+                        strokeWidth={2.5}
+                        strokeDasharray="5 4"
+                      />
+                    ))}
 
                     <Line
                       type="monotone"
@@ -448,8 +350,7 @@ export function HealthChart({
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-full"
                   style={{
-                    backgroundColor:
-                      seriesColors.clockIn,
+                    backgroundColor: seriesColors.clockIn,
                   }}
                   aria-hidden="true"
                 />
@@ -462,8 +363,7 @@ export function HealthChart({
                 <span
                   className="h-2.5 w-2.5 shrink-0"
                   style={{
-                    backgroundColor:
-                      seriesColors.clockOut,
+                    backgroundColor: seriesColors.clockOut,
                   }}
                   aria-hidden="true"
                 />

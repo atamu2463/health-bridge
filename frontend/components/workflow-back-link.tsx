@@ -1,7 +1,13 @@
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
-export function WorkflowBackLink({ href, label }: { href: string; label: string }) {
+export function WorkflowBackLink({
+  href,
+  label,
+}: {
+  href: string
+  label: string
+}) {
   return (
     <Link
       href={href}

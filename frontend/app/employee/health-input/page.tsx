@@ -68,10 +68,7 @@ export default function HealthInputPage() {
       if (timeoutId !== undefined) {
         window.clearTimeout(timeoutId)
       }
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange,
-      )
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
   }, [])
 
@@ -90,20 +87,12 @@ function HealthInputLoading() {
       <AppHeader role="employee" authenticated />
 
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-10">
-        <WorkflowBackLink
-          href="/employee/menu"
-          label="メニューへ戻る"
-        />
+        <WorkflowBackLink href="/employee/menu" label="メニューへ戻る" />
 
         <div>
-          <h1 className="text-xl font-bold sm:text-2xl">
-            今日の体調を入力
-          </h1>
+          <h1 className="text-xl font-bold sm:text-2xl">今日の体調を入力</h1>
 
-          <p
-            className="mt-1 text-sm text-muted-foreground"
-            role="status"
-          >
+          <p className="mt-1 text-sm text-muted-foreground" role="status">
             日付を確認しています...
           </p>
         </div>
@@ -127,9 +116,7 @@ function HealthInputForm({ currentDate }: { currentDate: Date }) {
   })
 
   const employee = employees.find((employee) => employee.id === "1")
-  const todayRecord = employee?.records.find(
-    (record) => record.date === today,
-  )
+  const todayRecord = employee?.records.find((record) => record.date === today)
 
   const saved: Record<CheckinType, boolean> = {
     clockIn: Boolean(todayRecord?.clockIn),
@@ -181,19 +168,12 @@ function HealthInputForm({ currentDate }: { currentDate: Date }) {
       <AppHeader role="employee" authenticated />
 
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-10">
-        <WorkflowBackLink
-          href="/employee/menu"
-          label="メニューへ戻る"
-        />
+        <WorkflowBackLink href="/employee/menu" label="メニューへ戻る" />
 
         <div>
-          <h1 className="text-xl font-bold sm:text-2xl">
-            今日の体調を入力
-          </h1>
+          <h1 className="text-xl font-bold sm:text-2xl">今日の体調を入力</h1>
 
-          <p className="mt-1 text-sm text-muted-foreground">
-            {displayDate}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{displayDate}</p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -231,9 +211,7 @@ function HealthInputForm({ currentDate }: { currentDate: Date }) {
                   </div>
                 </div>
 
-                {isSaved && (
-                  <Check className="h-5 w-5 text-primary" />
-                )}
+                {isSaved && <Check className="h-5 w-5 text-primary" />}
               </button>
             )
           })}
@@ -247,9 +225,7 @@ function HealthInputForm({ currentDate }: { currentDate: Date }) {
               </div>
 
               <div>
-                <p className="font-semibold">
-                  本日の体調入力は完了しています
-                </p>
+                <p className="font-semibold">本日の体調入力は完了しています</p>
 
                 <p className="mt-1 text-sm text-muted-foreground">
                   出勤時・退勤時の体調が登録されています
@@ -271,10 +247,7 @@ function HealthInputForm({ currentDate }: { currentDate: Date }) {
             </CardHeader>
 
             <CardContent>
-              <form
-                onSubmit={handleSubmit}
-                className="flex flex-col gap-6"
-              >
+              <form onSubmit={handleSubmit} className="flex flex-col gap-6">
                 <div className="flex flex-col gap-3">
                   <Label>現在の体調を選択</Label>
 
@@ -338,10 +311,7 @@ function HealthInputForm({ currentDate }: { currentDate: Date }) {
                   type="submit"
                   size="lg"
                   disabled={
-                    !status ||
-                    !comment.trim() ||
-                    isSubmitting ||
-                    saved[type]
+                    !status || !comment.trim() || isSubmitting || saved[type]
                   }
                 >
                   {isSubmitting
