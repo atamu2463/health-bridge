@@ -2,13 +2,13 @@
 
 ## 1. 文書の位置づけ
 
-本書は、現在の実装と、これから実装するMVPのAPI・DB設計案を分けて記録します。
+本書は、現在の実装と、これから実装するMVPのAPI・DB設計を分けて記録します。実装前に確定した設計と、引き続き判断が必要な事項を明示します。
 
 - 参照資料：Googleドキュメント[「【Docs】体調管理・共有アプリ」](https://docs.google.com/document/d/1EKeJU0Jydtram7yDto50QVDMukCxzGgsQxHxHNcGDyk/edit?tab=t.0)の「要件定義・技術選定 v2（再レビュー用）」「画面設計 v2（再レビュー用）」「DB設計v2」「API設計v2」「2026.09.17MTG」
 - 資料参照日：2026年9月18日
 - 判断基準：第2回レビュー後の決定、Issue #110 / #112の反映内容、現在のコードをv2案より優先
 
-API・DB設計は実装前の案です。現時点で実装済みのバックエンドAPIは `GET /health` だけであり、以下に並べる業務API、DBモデル、マイグレーション、認証・認可は未実装です。
+API・DB設計は実装前のものです。現時点で実装済みのバックエンドAPIは `GET /health` だけであり、以下に並べる業務API、DBモデル、マイグレーション、認証・認可は未実装です。
 
 ## 2. 現在と予定のシステム構成
 
@@ -77,17 +77,46 @@ PostgreSQL
 
 担当関係は、作成時（API-04）、担当範囲の参照・更新（API-05〜07、10、11）、担当変更（API-12、13）にまたがります。画面に対象IDが含まれていても信用せず、API側でログインユーザーのroleと `users.manager_id` を照合する必要があります。
 
-### 4.3 フロントエンドとAPI設計の未解消差分
+API-14「チーム体調傾向」は現行MVPから除外済みのため、業務APIへ追加しません。機能IDと同様にAPI IDも別機能へ再利用しません。
 
-業務APIは未実装のため、本対応ではどちらの値も変更していません。
+### 4.3 API共通表現（確定・未実装）
 
-| 対象 | 現在のフロントエンド | API／DB設計案 | 実装前に必要な判断 |
+- APIのリクエスト・レスポンスではIDを文字列として表現する
+- パスパラメータも文字列として受け取り、バックエンドで妥当な整数IDへ変換・検証してからDB処理に使用する
+- DBの主キーは整数とし、APIの文字列IDとは境界で明示的に変換する
+- conditionコードは `excellent`、`good`、`normal`、`caution`、`bad` とする
+- timingは `clockIn`、`clockOut` とする。DBの識別子はsnake_caseを維持するが、`health_records.timing` に保存する値も同じコードを使用する
+- managerの表示が必要なレスポンスでは、少なくとも文字列の `id` と `name` を持つオブジェクトを返す
+
+```json
+{
+  "id": "1",
+  "name": "鈴木 花子"
+}
+```
+
+モック固有の `new-...` 形式のIDや固定ユーザーID `"1"` は、実API接続後には使用しません。認証済みユーザーのIDとrole、現在の担当managerはサーバー側で特定し、クライアントから送信されたroleやmanager IDを認証・認可の根拠にしません。
+
+### 4.4 フロントエンドとAPI・DB設計の整合方針
+
+現在のフロントエンドで使用する型・値を維持しつつ、モック固有の表現を本番設計へ持ち込まないよう、次の方針で統一します。
+
+| 対象 | 確定した設計 | モックからの置き換え方針 |
 | --- | --- | --- | --- |
-| 最上位の体調コード | `excellent` | `very_good` | API接続前に正規コードを統一する |
-| 入力タイミング | `clockIn` / `clockOut` | `clock_in` / `clock_out` | DTO変換で吸収するか型を統一する |
-| ID | 文字列（例：`"1"`、`new-...`） | `INTEGER` | API境界の型とモック置換方針を決める |
-| 担当管理者 | 氏名文字列を状態に保存 | `users.manager_id` | manager IDを用いるレスポンス／表示変換を決める |
-| manager自身の編集・削除 | 到達可能なモックUIあり | 対応API・要件なし | MVP要件へ追加するかUIを別Issueで整理する |
+| 最上位の体調コード | API・DBとも `excellent` | フロントエンドの既存コードをそのまま使用する |
+| 入力タイミング | API・DBの保存値とも `clockIn` / `clockOut` | フロントエンドの既存コードをそのまま使用する |
+| ID | DBは整数、APIは文字列 | `new-...` を廃止し、APIが返すIDへ置き換える |
+| 担当manager | DBは `users.manager_id`、表示APIは `{ id, name }` | 氏名文字列だけの関連付けを廃止し、IDで識別する |
+
+次の事項は本対応では確定せず、関連APIの実装前に別途判断します。
+
+- manager登録資格の確認方法
+- 認証・セッション方式とCookie、CORS、CSRFの方針
+- 共通エラーレスポンス形式
+- `record_date`、日付境界、タイムゾーン、期間指定の詳細
+- 無効化後の履歴参照、担当変更履歴、同時更新の扱い
+- 初期データ、デモデータ、本番データの投入方法とRender／Supabase構成
+- manager自身の編集・削除UIと、到達不能な従業員検索・追加ダイアログのMVP上の扱い
 
 ## 5. DB設計案（未実装）
 
@@ -98,18 +127,19 @@ DB設計v2を第2回レビュー後のMVPと照合した結果、チーム集計
 | テーブル | 主なカラム | 主な制約・役割 |
 | --- | --- | --- |
 | `roles` | `id`, `name` | `name` は一意。初期値は `manager`, `employee` |
-| `users` | `id`, `name`, `email`, `password_hash`, `role_id`, `manager_id`, `is_active`, `deactivated_at`, timestamps | `email` は一意。`role_id` → `roles.id`。`manager_id` → `users.id` の自己参照で現在の担当managerを表す |
+| `users` | `id`, `name`, `email`, `password_hash`, `role_id`, `manager_id`, `is_active`, `deactivated_at`, timestamps | `email` は一意。`role_id` → `roles.id`。`manager_id` → `users.id` の自己参照で現在の担当managerを表す。氏名文字列では関連付けない |
 | `conditions` | `id`, `code`, `name`, `score`, `display_order` | `code`, `name`, `score`, `display_order` はそれぞれ一意。5段階の固定値 |
 | `health_records` | `id`, `employee_id`, `record_date`, `timing`, `condition_id`, `comment`, `created_at` | `employee_id` → `users.id`、`condition_id` → `conditions.id`。同一employee・日付・timingを一意にする |
 
 ### 5.2 重要な制約と業務ルール
 
-- `users.manager_id` はnullableな自己参照とし、employeeの現在の担当managerを示す。manager自身は `NULL` とする設計案
+- PostgreSQLの各テーブルの主キーは整数とする。APIではIDを文字列として返し、DBアクセス前に整数へ変換・検証する
+- `users.manager_id` はnullableな自己参照とし、employeeの現在の担当managerを示す。manager自身は `NULL` とする
 - `health_records` に `UNIQUE (employee_id, record_date, timing)` を設定する
-- `timing` は `CHECK (timing IN ('clock_in', 'clock_out'))` とする
+- `timing` は `CHECK (timing IN ('clockIn', 'clockOut'))` とする
 - コメントは必須とし、`VARCHAR(500) NOT NULL` とする設計案
 - 「未入力」は `conditions` に追加せず、該当する `health_records` が存在しない状態として判定する
-- 「未入力」絞り込みは、指定日の `clock_in` が存在しないemployeeを対象とする仮仕様
+- 「未入力」絞り込みは、指定日の `clockIn` が存在しないemployeeを対象とする仮仕様
 - 担当変更時は `users.manager_id` を更新し、employeeアカウントと過去の体調記録を保持する
 - employeeの無効化は `is_active = false` とし、物理削除しない
 
@@ -117,7 +147,7 @@ DB設計v2を第2回レビュー後のMVPと照合した結果、チーム集計
 
 | code | 画面表示 | score | display_order |
 | --- | --- | ---: | ---: |
-| `very_good` | とても良好 | 2 | 1 |
+| `excellent` | とても良好 | 2 | 1 |
 | `good` | 良好 | 1 | 2 |
 | `normal` | 普通 | 0 | 3 |
 | `caution` | 注意 | -1 | 4 |
@@ -127,6 +157,8 @@ DB設計v2を第2回レビュー後のMVPと照合した結果、チーム集計
 ## 6. ER図（設計案・未実装）
 
 mermaidで作成した暫定版です。今後の機能実装によって制約・カラム等を変更する可能性があります。
+
+画像はテーブル間の関係を示す既存の構造図です。今回確定したコード値はDB構造を変えないため画像ファイルは更新せず、timingの値は5.2と以下のMermaidソースを正とします。
 
 ![HealthBridgeのER図（設計案・未実装）](images/er-diagram.png)
 
@@ -170,7 +202,7 @@ erDiagram
         int id PK
         int employee_id FK
         date record_date
-        varchar timing "clock_in or clock_out"
+        varchar timing "clockIn or clockOut"
         int condition_id FK
         varchar comment
         timestamptz created_at
@@ -183,7 +215,7 @@ Mermaidの属性表現では複合一意制約を表しにくいため、`HEALTH
 
 ## 7. 今後の実装順序
 
-1. フロントエンドとAPI設計のコード値・ID型を確定する
+1. 確定したcondition・timingコード、ID境界、manager表現に基づいてDTOと入力検証を定義する
 2. GORMモデルとマイグレーションを実装する
 3. Ginを導入し、MVP業務APIを画面単位で実装する
 4. 認証と、role・担当関係に基づくサーバー側認可を実装する
@@ -191,4 +223,4 @@ Mermaidの属性表現では複合一意制約を表しにくいため、`HEALTH
 6. Render / Supabaseの構成と公開環境を整備する
 7. API・DB・画面を通したテストとCIを整備する
 
-機能・設計変更時はREADMEと関連docsも同じIssueで更新します。独立した設計変更や、本書に残したコード値・未定義UI等の不整合は、アプリ実装とは分けてIssueで追跡します。
+機能・設計変更時はREADMEと関連docsも同じIssueで更新します。独立した設計変更や、本書に残した未確定事項・未定義UI等の不整合は、アプリ実装とは分けてIssueで追跡します。
