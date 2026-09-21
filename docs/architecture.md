@@ -8,7 +8,7 @@
 - 資料参照日：2026年9月18日
 - 判断基準：第2回レビュー後の決定、Issue #110 / #112の反映内容、現在のコードをv2案より優先
 
-API・DB設計は実装前のものです。現時点で実装済みのバックエンドAPIは `GET /health` だけであり、以下に並べる業務API、DBモデル、マイグレーション、認証・認可は未実装です。
+業務API設計は実装前のものです。DBモデル、マイグレーション、マスターデータは実装済みですが、現時点で実装済みのバックエンドAPIは `GET /health` だけであり、以下に並べる業務APIと認証・認可は未実装です。
 
 ## 2. 現在と予定のシステム構成
 
@@ -21,8 +21,8 @@ Frontend: Next.js / React / TypeScript
         │
         │ HTTP / JSON（接続予定）
         ▼
-Backend: Go / GORM
-現在: Gin + GET /health、共通middleware、graceful shutdown
+Backend: Go / Gin / GORM
+現在: GET /health、共通middleware、graceful shutdown、DBモデル／マイグレーション
 予定: Ginによる業務API、Renderへ配置
         │
         │ SQL / GORM
@@ -40,10 +40,10 @@ PostgreSQL
 | --- | --- | --- |
 | フロントエンド | 利用者別画面、入力、一覧、グラフ、モック操作 | モックUI実装済み。業務API未接続 |
 | モック状態管理 | 従業員・担当関係・体調記録の一時更新 | React Contextで実装。再読み込みで初期化 |
-| バックエンド | 認証・認可、業務ルール、DB操作 | Gin、PostgreSQL接続、共通middleware、graceful shutdownまで実装 |
+| バックエンド | 認証・認可、業務ルール、DB操作 | Gin、PostgreSQL接続、共通middleware、graceful shutdown、DBモデル／マイグレーションまで実装 |
 | Health Check | HTTPプロセスの稼働確認 | `GET /health` 実装済み。DB疎通確認ではない |
 | 業務API | アカウント・体調記録・担当関係の処理 | 設計済み・未実装 |
-| 開発DB | ローカル開発データの保存 | Docker ComposeでPostgreSQLを構成、接続処理実装済み |
+| 開発DB | ローカル開発データの保存 | Docker ComposeでPostgreSQLを構成。4テーブルとマスターデータを明示コマンドで作成可能 |
 | 本番DB | 公開環境のデータ保存 | Supabase上のPostgreSQLを使用予定、未構築 |
 | 認証・認可 | ロール・担当関係に基づく制御 | 未実装。ログイン、401、403は画面のみ |
 
@@ -121,12 +121,12 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 - 共通エラーレスポンス形式
 - `record_date`、日付境界、タイムゾーン、期間指定の詳細
 - 無効化後の履歴参照、担当変更履歴、同時更新の扱い
-- 初期データ、デモデータ、本番データの投入方法とRender／Supabase構成
+- デモデータ、本番データの投入方法とRender／Supabase構成
 - manager自身の編集・削除UIと、到達不能な従業員検索・追加ダイアログのMVP上の扱い
 
-## 5. DB設計案（未実装）
+## 5. DB設計（実装済み）
 
-DB設計v2を第2回レビュー後のMVPと照合した結果、チーム集計を外すためのテーブル削除・追加は不要です。グラフの色・線・横スクロールも表示上の変更であり、DB構造へ影響しません。
+DB設計v2を第2回レビュー後のMVPと照合し、次の4テーブルをGORMモデルとPostgreSQLスキーマとして実装しています。チーム集計用テーブル、担当変更履歴、認証用テーブルは追加していません。
 
 ### 5.1 テーブル概要
 
@@ -139,17 +139,17 @@ DB設計v2を第2回レビュー後のMVPと照合した結果、チーム集計
 
 ### 5.2 重要な制約と業務ルール
 
-- PostgreSQLの各テーブルの主キーは整数とする。APIではIDを文字列として返し、DBアクセス前に整数へ変換・検証する
+- PostgreSQLの各テーブルの主キーは整数とする。GORMモデルでは `uint`、PostgreSQLでは `bigint` として実装し、APIではIDを文字列として返してDBアクセス前に変換・検証する
 - `users.manager_id` はnullableな自己参照とし、employeeの現在の担当managerを示す。manager自身は `NULL` とする
 - `health_records` に `UNIQUE (employee_id, record_date, timing)` を設定する
 - `timing` は `CHECK (timing IN ('clockIn', 'clockOut'))` とする
-- コメントは必須とし、`VARCHAR(500) NOT NULL` とする設計案
+- コメントは必須とし、`VARCHAR(500) NOT NULL` とする
 - 「未入力」は `conditions` に追加せず、該当する `health_records` が存在しない状態として判定する
 - 「未入力」絞り込みは、指定日の `clockIn` が存在しないemployeeを対象とする仮仕様
 - 担当変更時は `users.manager_id` を更新し、employeeアカウントと過去の体調記録を保持する
 - employeeの無効化は `is_active = false` とし、物理削除しない
 
-### 5.3 conditions初期データ案
+### 5.3 conditions初期データ
 
 | code | 画面表示 | score | display_order |
 | --- | --- | ---: | ---: |
@@ -159,14 +159,25 @@ DB設計v2を第2回レビュー後のMVPと照合した結果、チーム集計
 | `caution` | 注意 | -1 | 4 |
 | `bad` | 悪化 | -2 | 5 |
 
+`roles`には `manager`、`employee` を投入します。マスターデータは一意キーを使ったUPSERTで投入し、複数回実行しても重複しません。デモユーザーとデモ体調記録は投入しません。
 
-## 6. ER図（設計案・未実装）
+### 5.4 マイグレーション
 
-mermaidで作成した暫定版です。今後の機能実装によって制約・カラム等を変更する可能性があります。
+HTTPサーバー起動時には自動マイグレーションを行いません。Docker ComposeでDBを起動した後、次の専用コマンドを明示的に実行します。
+
+```bash
+docker compose run --rm backend /usr/local/bin/migrate
+```
+
+このコマンドはGORMのマイグレーションとマスターデータ投入を同じトランザクションで実行します。テーブル、外部キー、NOT NULL、一意、CHECK、文字数の各制約はPostgreSQL上の統合テストで確認します。外部キー列には索引を設定し、`health_records`の複合一意索引はemployee別・日付順の取得にも利用できる並びにしています。
+
+## 6. ER図（実装済み）
+
+実装した4テーブルの関係を示します。今後の機能実装によって制約・カラム等を変更する場合は、モデル、マイグレーション、本文、図を同時に更新します。
 
 画像はテーブル間の関係を示す既存の構造図です。今回確定したコード値はDB構造を変えないため画像ファイルは更新せず、timingの値は5.2と以下のMermaidソースを正とします。
 
-![HealthBridgeのER図（設計案・未実装）](images/er-diagram.png)
+![HealthBridgeのER図](images/er-diagram.png)
 
 <details>
 <summary>Mermaidソース</summary>
@@ -179,17 +190,17 @@ erDiagram
     CONDITIONS ||--o{ HEALTH_RECORDS : "condition_id"
 
     ROLES {
-        int id PK
+        bigint id PK
         varchar name UK
     }
 
     USERS {
-        int id PK
+        bigint id PK
         varchar name
         varchar email UK
         varchar password_hash
-        int role_id FK
-        int manager_id FK "nullable; users.id"
+        bigint role_id FK
+        bigint manager_id FK "nullable; users.id"
         boolean is_active
         timestamptz deactivated_at "nullable"
         timestamptz created_at
@@ -197,7 +208,7 @@ erDiagram
     }
 
     CONDITIONS {
-        int id PK
+        bigint id PK
         varchar code UK
         varchar name UK
         smallint score UK
@@ -205,11 +216,11 @@ erDiagram
     }
 
     HEALTH_RECORDS {
-        int id PK
-        int employee_id FK
+        bigint id PK
+        bigint employee_id FK
         date record_date
         varchar timing "clockIn or clockOut"
-        int condition_id FK
+        bigint condition_id FK
         varchar comment
         timestamptz created_at
     }
@@ -222,11 +233,10 @@ Mermaidの属性表現では複合一意制約を表しにくいため、`HEALTH
 ## 7. 今後の実装順序
 
 1. 確定したcondition・timingコード、ID境界、manager表現に基づいてDTOと入力検証を定義する
-2. GORMモデルとマイグレーションを実装する
-3. Gin上へMVP業務APIを画面単位で実装する
-4. 認証と、role・担当関係に基づくサーバー側認可を実装する
-5. フロントエンドのモック状態をAPI接続へ置き換える
-6. Render / Supabaseの構成と公開環境を整備する
-7. API・DB・画面を通したテストとCIを整備する
+2. Gin上へMVP業務APIを画面単位で実装する
+3. 認証と、role・担当関係に基づくサーバー側認可を実装する
+4. フロントエンドのモック状態をAPI接続へ置き換える
+5. Render / Supabaseの構成と公開環境を整備する
+6. API・DB・画面を通したテストとCIを整備する
 
 機能・設計変更時はREADMEと関連docsも同じIssueで更新します。独立した設計変更や、本書に残した未確定事項・未定義UI等の不整合は、アプリ実装とは分けてIssueで追跡します。

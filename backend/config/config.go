@@ -17,7 +17,7 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	databaseURL, err := requiredEnvironmentVariable("DATABASE_URL")
+	databaseURL, err := LoadDatabaseURL()
 	if err != nil {
 		return Config{}, err
 	}
@@ -45,6 +45,10 @@ func Load() (Config, error) {
 		DatabaseURL:    databaseURL,
 		AllowedOrigins: allowedOrigins,
 	}, nil
+}
+
+func LoadDatabaseURL() (string, error) {
+	return requiredEnvironmentVariable("DATABASE_URL")
 }
 
 func requiredEnvironmentVariable(name string) (string, error) {
