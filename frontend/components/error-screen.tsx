@@ -21,10 +21,7 @@ export function ErrorScreen({
 }: ErrorScreenProps) {
   return (
     <div className="min-h-svh bg-background">
-      <AppHeader
-        backHref="/"
-        backLabel="ホームに戻る"
-      />
+      <AppHeader backHref="/" backLabel="ホームに戻る" />
 
       <main className="flex min-h-[calc(100svh-4rem)] items-center justify-center px-4 py-12">
         <div className="flex w-full max-w-md flex-col items-center gap-6 text-center">
@@ -55,9 +52,7 @@ export function ErrorScreen({
               size="lg"
               className="w-full sm:w-auto"
             >
-              <Link href="/">
-                ホームに戻る
-              </Link>
+              <Link href="/">ホームに戻る</Link>
             </Button>
           </div>
         </div>

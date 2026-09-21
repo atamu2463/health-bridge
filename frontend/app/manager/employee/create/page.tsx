@@ -60,9 +60,7 @@ export default function EmployeeCreatePage() {
             <CardHeader className="items-center text-center">
               <CheckCircle2 className="h-12 w-12 text-primary" />
 
-              <CardTitle>
-                従業員アカウントを作成しました
-              </CardTitle>
+              <CardTitle>従業員アカウントを作成しました</CardTitle>
 
               <CardDescription>
                 {createdName}さんを担当従業員として追加しました。
@@ -71,9 +69,7 @@ export default function EmployeeCreatePage() {
 
             <CardContent className="flex flex-col gap-3">
               <Button asChild className="w-full">
-                <Link href="/manager/dashboard">
-                  担当従業員一覧へ移動
-                </Link>
+                <Link href="/manager/dashboard">担当従業員一覧へ移動</Link>
               </Button>
 
               <Button
@@ -102,19 +98,14 @@ export default function EmployeeCreatePage() {
       <AppHeader role="manager" authenticated />
 
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
-        <WorkflowBackLink
-          href="/manager/menu"
-          label="メニューへ戻る"
-        />
+        <WorkflowBackLink href="/manager/menu" label="メニューへ戻る" />
 
         <div className="flex flex-1 items-center justify-center">
           <Card className="w-full max-w-md">
             <CardHeader className="items-center text-center">
               <UserPlus className="h-8 w-8 text-primary" />
 
-              <CardTitle>
-                従業員アカウントを作成
-              </CardTitle>
+              <CardTitle>従業員アカウントを作成</CardTitle>
 
               <CardDescription>
                 従業員へ共有する初回ログイン情報を登録します
@@ -122,30 +113,14 @@ export default function EmployeeCreatePage() {
             </CardHeader>
 
             <CardContent>
-              <form
-                onSubmit={submit}
-                className="flex flex-col gap-4"
-              >
+              <form onSubmit={submit} className="flex flex-col gap-4">
                 {[
                   ["name", "氏名", "例：山田 太郎"],
-                  [
-                    "email",
-                    "メールアドレス",
-                    "employee@company.com",
-                  ],
-                  [
-                    "password",
-                    "初回パスワード",
-                    "8文字以上",
-                  ],
+                  ["email", "メールアドレス", "employee@company.com"],
+                  ["password", "初回パスワード", "8文字以上"],
                 ].map(([key, label, placeholder]) => (
-                  <div
-                    key={key}
-                    className="flex flex-col gap-2"
-                  >
-                    <Label htmlFor={key}>
-                      {label}
-                    </Label>
+                  <div key={key} className="flex flex-col gap-2">
+                    <Label htmlFor={key}>{label}</Label>
 
                     <Input
                       id={key}
@@ -164,19 +139,14 @@ export default function EmployeeCreatePage() {
                         })
                       }
                       placeholder={placeholder}
-                      minLength={
-                        key === "password" ? 8 : undefined
-                      }
+                      minLength={key === "password" ? 8 : undefined}
                       required
                     />
                   </div>
                 ))}
 
                 {formError && (
-                  <p
-                    className="text-sm text-destructive"
-                    role="alert"
-                  >
+                  <p className="text-sm text-destructive" role="alert">
                     {formError}
                   </p>
                 )}

@@ -31,11 +31,7 @@ export default function AdminLoginPage() {
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
-      <AppHeader
-        role="manager"
-        backHref="/"
-        backLabel="トップに戻る"
-      />
+      <AppHeader role="manager" backHref="/" backLabel="トップに戻る" />
 
       <main className="flex flex-1 items-center justify-center px-4 py-8 sm:py-12">
         <Card className="w-full max-w-md">
@@ -54,14 +50,9 @@ export default function AdminLoginPage() {
           </CardHeader>
 
           <CardContent>
-            <form
-              onSubmit={handleSubmit}
-              className="flex flex-col gap-4"
-            >
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="email">
-                  メールアドレス
-                </Label>
+                <Label htmlFor="email">メールアドレス</Label>
 
                 <Input
                   id="email"
@@ -74,9 +65,7 @@ export default function AdminLoginPage() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <Label htmlFor="password">
-                  パスワード
-                </Label>
+                <Label htmlFor="password">パスワード</Label>
 
                 <Input
                   id="password"
@@ -88,20 +77,12 @@ export default function AdminLoginPage() {
                 />
               </div>
 
-              <Button
-                type="submit"
-                className="mt-2 w-full"
-                size="lg"
-              >
+              <Button type="submit" className="mt-2 w-full" size="lg">
                 ログイン
               </Button>
 
               <div className="flex justify-center border-t border-border pt-4">
-                <Button
-                  asChild
-                  variant="link"
-                  className="text-primary"
-                >
+                <Button asChild variant="link" className="text-primary">
                   <Link href="/manager/register">
                     managerアカウントを新規登録
                   </Link>

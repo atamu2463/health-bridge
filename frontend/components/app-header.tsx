@@ -76,13 +76,8 @@ export function AppHeader({
               className="gap-1 text-muted-foreground"
             >
               <Link href="/" aria-label="ログアウト">
-                <LogOut
-                  className="h-4 w-4"
-                  aria-hidden="true"
-                />
-                <span className="hidden sm:inline">
-                  ログアウト
-                </span>
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">ログアウト</span>
               </Link>
             </Button>
           </>
@@ -94,13 +89,8 @@ export function AppHeader({
             className="gap-1 text-muted-foreground"
           >
             <Link href={backHref} aria-label={backLabel}>
-              <ArrowLeft
-                className="h-4 w-4"
-                aria-hidden="true"
-              />
-              <span className="hidden sm:inline">
-                {backLabel}
-              </span>
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">{backLabel}</span>
             </Link>
           </Button>
         ) : null}
