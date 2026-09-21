@@ -32,21 +32,14 @@ function HealthEntryCard({ label, entry }: HealthEntryCardProps) {
   return (
     <div className="min-w-0 rounded-lg border border-border bg-background/60 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs font-medium text-muted-foreground">
-          {label}
-        </p>
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
 
         {status ? (
-          <Badge
-            variant="outline"
-            className={status.className}
-          >
+          <Badge variant="outline" className={status.className}>
             {status.label}
           </Badge>
         ) : (
-          <Badge variant="outline">
-            未入力
-          </Badge>
+          <Badge variant="outline">未入力</Badge>
         )}
       </div>
 
@@ -57,11 +50,7 @@ function HealthEntryCard({ label, entry }: HealthEntryCardProps) {
   )
 }
 
-export function EmployeeList({
-  employees,
-  date,
-  filter,
-}: EmployeeListProps) {
+export function EmployeeList({ employees, date, filter }: EmployeeListProps) {
   const filteredEmployees = employees.filter((employee) => {
     const record = getRecordForDate(employee, date)
 
@@ -74,8 +63,7 @@ export function EmployeeList({
     }
 
     return (
-      record?.clockIn?.status === filter ||
-      record?.clockOut?.status === filter
+      record?.clockIn?.status === filter || record?.clockOut?.status === filter
     )
   })
 
@@ -99,10 +87,7 @@ export function EmployeeList({
           <Card key={employee.id}>
             <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
               <div className="flex items-center justify-between gap-3">
-                <Link
-                  href={employeeDetailHref}
-                  className="min-w-0"
-                >
+                <Link href={employeeDetailHref} className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="truncate font-semibold hover:text-primary">
                       {employee.name}
@@ -133,14 +118,8 @@ export function EmployeeList({
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <HealthEntryCard
-                  label="出勤時"
-                  entry={record?.clockIn}
-                />
-                <HealthEntryCard
-                  label="退勤時"
-                  entry={record?.clockOut}
-                />
+                <HealthEntryCard label="出勤時" entry={record?.clockIn} />
+                <HealthEntryCard label="退勤時" entry={record?.clockOut} />
               </div>
             </CardContent>
           </Card>

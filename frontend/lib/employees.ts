@@ -21,15 +21,44 @@ export interface Employee {
   records: DailyHealthRecord[]
 }
 
-export const healthStatusConfig: Record<HealthStatus, { label: string; score: number; className: string }> = {
-  excellent: { label: "とても良好", score: 2, className: "border-emerald-500/30 bg-emerald-500/15 text-emerald-700" },
-  good: { label: "良好", score: 1, className: "border-green-500/30 bg-green-500/15 text-green-700" },
-  normal: { label: "普通", score: 0, className: "border-slate-400/30 bg-slate-400/15 text-slate-700" },
-  caution: { label: "注意", score: -1, className: "border-amber-500/30 bg-amber-500/15 text-amber-700" },
-  bad: { label: "悪化", score: -2, className: "border-red-500/30 bg-red-500/15 text-red-700" },
+export const healthStatusConfig: Record<
+  HealthStatus,
+  { label: string; score: number; className: string }
+> = {
+  excellent: {
+    label: "とても良好",
+    score: 2,
+    className: "border-emerald-500/30 bg-emerald-500/15 text-emerald-700",
+  },
+  good: {
+    label: "良好",
+    score: 1,
+    className: "border-green-500/30 bg-green-500/15 text-green-700",
+  },
+  normal: {
+    label: "普通",
+    score: 0,
+    className: "border-slate-400/30 bg-slate-400/15 text-slate-700",
+  },
+  caution: {
+    label: "注意",
+    score: -1,
+    className: "border-amber-500/30 bg-amber-500/15 text-amber-700",
+  },
+  bad: {
+    label: "悪化",
+    score: -2,
+    className: "border-red-500/30 bg-red-500/15 text-red-700",
+  },
 }
 
-const statuses: HealthStatus[] = ["excellent", "good", "normal", "caution", "bad"]
+const statuses: HealthStatus[] = [
+  "excellent",
+  "good",
+  "normal",
+  "caution",
+  "bad",
+]
 const comments: Record<HealthStatus, string[]> = {
   excellent: ["よく眠れて、とても元気です", "集中力があり前向きです"],
   good: ["大きな問題はなく良好です", "少し眠気はありますが元気です"],
@@ -68,8 +97,7 @@ export function getMillisecondsUntilNextBusinessDate(referenceDate: Date) {
     .split("-")
     .map(Number)
   const nextMidnight =
-    Date.UTC(year, month - 1, day + 1) -
-    TOKYO_UTC_OFFSET_MILLISECONDS
+    Date.UTC(year, month - 1, day + 1) - TOKYO_UTC_OFFSET_MILLISECONDS
 
   return Math.max(nextMidnight - referenceDate.getTime(), 0)
 }
@@ -79,9 +107,7 @@ function dateKey(referenceDate: Date, daysAgo: number) {
     .split("-")
     .map(Number)
 
-  return new Date(
-    Date.UTC(year, month - 1, day - daysAgo),
-  )
+  return new Date(Date.UTC(year, month - 1, day - daysAgo))
     .toISOString()
     .slice(0, 10)
 }
@@ -97,13 +123,18 @@ function buildRecords(
 ): DailyHealthRecord[] {
   return Array.from({ length: 31 }, (_, day) => {
     const clockInStatus = statuses[(day + employeeIndex) % statuses.length]
-    const clockOutStatus = statuses[(day * 2 + employeeIndex + 1) % statuses.length]
+    const clockOutStatus =
+      statuses[(day * 2 + employeeIndex + 1) % statuses.length]
     const clockInMissing = (day + employeeIndex) % 13 === 0
     const clockOutMissing = (day * 2 + employeeIndex) % 11 === 0
     return {
       date: dateKey(referenceDate, day),
-      ...(clockInMissing ? {} : { clockIn: makeEntry(clockInStatus, day + employeeIndex) }),
-      ...(clockOutMissing ? {} : { clockOut: makeEntry(clockOutStatus, day + employeeIndex + 1) }),
+      ...(clockInMissing
+        ? {}
+        : { clockIn: makeEntry(clockInStatus, day + employeeIndex) }),
+      ...(clockOutMissing
+        ? {}
+        : { clockOut: makeEntry(clockOutStatus, day + employeeIndex + 1) }),
     }
   })
 }
@@ -149,9 +180,7 @@ export function getRecentRecords(
 
   // 固定幅のYYYY-MM-DDは辞書順と日付順が一致するため、日付オブジェクトへ変換不要
   return employee.records
-    .filter(
-      (record) => record.date >= startDateKey && record.date <= today,
-    )
+    .filter((record) => record.date >= startDateKey && record.date <= today)
     .reverse()
 }
 
@@ -164,8 +193,10 @@ export function searchEmployeeAccounts(
   const normalizedEmail = email.trim().toLowerCase()
   if (!normalizedName && !normalizedEmail) return []
   return employeeAccounts.filter((employee) => {
-    const nameMatches = !normalizedName || employee.name.toLowerCase().includes(normalizedName)
-    const emailMatches = !normalizedEmail || employee.email.toLowerCase().includes(normalizedEmail)
+    const nameMatches =
+      !normalizedName || employee.name.toLowerCase().includes(normalizedName)
+    const emailMatches =
+      !normalizedEmail || employee.email.toLowerCase().includes(normalizedEmail)
     return nameMatches && emailMatches
   })
 }

@@ -55,7 +55,11 @@ export function AccountMenu({ defaultName, defaultEmail }: AccountMenuProps) {
       {/* Step 1: choose edit or delete */}
       <Dialog open={menuOpen} onOpenChange={setMenuOpen}>
         <DialogTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-1 text-xs text-muted-foreground sm:text-sm">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-xs text-muted-foreground sm:text-sm"
+          >
             <span className="max-w-[8rem] truncate">{name}</span>
             <ChevronDown className="h-4 w-4 shrink-0" />
           </Button>
@@ -97,7 +101,9 @@ export function AccountMenu({ defaultName, defaultEmail }: AccountMenuProps) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>アカウント情報</DialogTitle>
-            <DialogDescription>氏名やメールアドレスを編集できます。</DialogDescription>
+            <DialogDescription>
+              氏名やメールアドレスを編集できます。
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
