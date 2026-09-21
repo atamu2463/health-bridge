@@ -2,7 +2,7 @@
 
 従業員が日々の体調を記録し、本人の振り返りと管理者による状況把握を支援する体調管理・共有アプリです。
 
-現在は、就労移行支援事業所のスタッフによる第2回レビュー後のMVPを、フロントエンドのモックUIで確認できる段階です。バックエンドはGo / GORMによるPostgreSQL接続と `GET /health` まで実装しており、認証・業務API・DBモデル／マイグレーション・フロントエンドとの接続は未実装です。
+現在は、就労移行支援事業所のスタッフによる第2回レビュー後のMVPを、フロントエンドのモックUIで確認できる段階です。バックエンドはGo / Gin / GORMによるPostgreSQL接続と `GET /health`、共通middleware、graceful shutdownまで実装しており、認証・業務API・DBモデル／マイグレーション・フロントエンドとの接続は未実装です。
 
 ## デモ
 
@@ -94,7 +94,7 @@ https://health-bridge-management.vercel.app/
 | フロントエンド | 実装済み・公開中 | Next.js / React / TypeScript / Tailwind CSS、Vercel |
 | UI | 実装済み | shadcn/ui / Radix UI |
 | グラフ | 実装済み | Recharts |
-| バックエンド | 基盤のみ実装、今後拡張 | Go / GORM / 機能実装ではGinを導入予定 |
+| バックエンド | 共通基盤まで実装、今後拡張 | Go / Gin / GORM |
 | バックエンド配置 | 予定 | Render |
 | 開発DB | 接続処理まで実装 | Docker上のPostgreSQL |
 | 本番DB | 予定 | Supabase上のPostgreSQL |
@@ -102,7 +102,7 @@ https://health-bridge-management.vercel.app/
 | バージョン管理 | 使用中 | Git / GitHub |
 
 > [!NOTE]
-> バックエンドは未デプロイです。Render、Supabase、Ginは今後の予定であり、導入・接続済みではありません。
+> バックエンドは未デプロイです。Render、Supabaseは今後の予定であり、接続済みではありません。
 
 ## 技術選定理由
 
@@ -121,7 +121,7 @@ Next.jsは、今回v0が生成したコードの構成を引き継いで使用�
 ### バックエンド（Go / Gin）
 
 Goは、新卒研修で使用した経験があり、既存知識を活かして実装を進めたいと考え、採用しました。
-ヘルスチェックは標準ライブラリを使用していますが、サービス実装ではフレームワークGinを使用して効率よく開発を進める予定です。
+HTTPルーティングとmiddlewareにはGinを使用し、ルーターを起動処理から分離してテストしやすい構成にしています。
 
 ## 現在の実装状況
 
@@ -130,14 +130,66 @@ Goは、新卒研修で使用した経験があり、既存知識を活かして
 | フロントエンドのモックUI | 実装済み | 主要画面とブラウザ内の操作フローを確認可能 |
 | Docker開発環境 | 構築済み | Frontend / Backend / PostgreSQLをDocker Composeで構成 |
 | PostgreSQL接続 | 実装済み | Go / GORMから開発DBへ接続する処理 |
-| HTTPサーバー | 実装済み | Go標準ライブラリ `net/http` を使用 |
-| Health Check API | 実装済み | `GET /health` はHTTPプロセスの稼働確認を返す |
+| HTTPサーバー | 実装済み | Ginルーターと `http.Server`、graceful shutdownを使用 |
+| Health Check API | 実装済み | `GET /health` は `200 OK` と `{"status":"ok"}` を返す |
 | DBモデル／マイグレーション | 未実装 | 設計案のみ |
 | 業務API | 未実装 | API設計案のみ |
 | 実認証／サーバー側認可 | 未実装 | ログイン画面や401／403画面はモックUI |
 | DB永続化 | 未実装 | 画面データはモック状態 |
 | フロントエンド／API接続 | 未実装 | 業務API実装後に接続予定 |
 | バックエンドのデプロイ | 未実施 | Renderへデプロイ予定 |
+
+## ローカル開発環境
+
+DockerとDocker Composeを使用して、フロントエンド、バックエンド、PostgreSQLを起動できます。
+
+### 1. 環境変数の準備
+
+```bash
+cp .default.env .env
+```
+
+`.env`へ、ローカル開発用のPostgreSQL設定を入力してください。
+
+```env
+POSTGRES_USER=任意のユーザー名
+POSTGRES_PASSWORD=任意のパスワード
+POSTGRES_DB=health_bridge
+BACKEND_PORT=8080
+ALLOWED_ORIGINS=http://localhost:3000
+```
+
+実際の認証情報や本番環境の値はコミットしないでください。
+
+### 2. 起動
+
+```bash
+docker compose up -d --build
+```
+
+バックエンドのコードを変更した場合も、イメージを更新するため`--build`を付けて起動します。
+
+### 3. バックエンドの起動確認
+
+```bash
+curl http://localhost:8080/health
+```
+
+次のJSONが返れば、バックエンドのHTTPサーバーは起動しています。
+
+```json
+{"status":"ok"}
+```
+
+このエンドポイントはHTTPプロセスの稼働確認用であり、PostgreSQLへの疎通確認は行いません。
+
+### 4. 停止
+
+```bash
+docker compose down
+```
+
+PostgreSQLのデータはDockerボリュームに保持されます。通常の停止では`docker compose down -v`を使用しません。
 
 ## 開発プロセス
 

@@ -137,7 +137,7 @@ managerの表示例：
 ### 6.1 現在の完成範囲
 
 - フロントエンド：モックUIと主要操作フロー
-- バックエンド：Go / GORMのPostgreSQL接続、標準ライブラリHTTPサーバー、`GET /health`
+- バックエンド：Go / Gin / GORMのPostgreSQL接続、`GET /health`、JSONエラー、CORS、graceful shutdownの共通基盤
 - 未完成：実認証、サーバー側認可、業務API、DBモデル／マイグレーション、DB永続化、フロントエンドAPI接続、バックエンド公開
 
 ### 6.2 MVP後・将来検討

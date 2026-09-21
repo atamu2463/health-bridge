@@ -22,7 +22,7 @@ Frontend: Next.js / React / TypeScript
         │ HTTP / JSON（接続予定）
         ▼
 Backend: Go / GORM
-現在: net/http + GET /health
+現在: Gin + GET /health、共通middleware、graceful shutdown
 予定: Ginによる業務API、Renderへ配置
         │
         │ SQL / GORM
@@ -40,7 +40,7 @@ PostgreSQL
 | --- | --- | --- |
 | フロントエンド | 利用者別画面、入力、一覧、グラフ、モック操作 | モックUI実装済み。業務API未接続 |
 | モック状態管理 | 従業員・担当関係・体調記録の一時更新 | React Contextで実装。再読み込みで初期化 |
-| バックエンド | 認証・認可、業務ルール、DB操作 | PostgreSQL接続と標準ライブラリHTTPサーバーのみ実装 |
+| バックエンド | 認証・認可、業務ルール、DB操作 | Gin、PostgreSQL接続、共通middleware、graceful shutdownまで実装 |
 | Health Check | HTTPプロセスの稼働確認 | `GET /health` 実装済み。DB疎通確認ではない |
 | 業務API | アカウント・体調記録・担当関係の処理 | 設計済み・未実装 |
 | 開発DB | ローカル開発データの保存 | Docker ComposeでPostgreSQLを構成、接続処理実装済み |
@@ -53,9 +53,15 @@ PostgreSQL
 
 | メソッド | パス | 目的 | 実装 |
 | --- | --- | --- | --- |
-| `GET` | `/health` | HTTPプロセスが応答できることを確認し、`200 OK` と本文 `OK` を返す | Go標準ライブラリ `net/http` で実装済み |
+| `GET` | `/health` | HTTPプロセスが応答できることを確認し、`200 OK` とJSON `{"status":"ok"}` を返す | Ginで実装済み |
 
 サーバー起動前にDB接続を行いますが、`GET /health` のハンドラー自体はDBへ問い合わせません。
+
+ルーターは起動処理から分離しています。GinのLoggerとRecoveryを使用し、未定義ルートは `404`、panic時は `500` の安全なJSONを返します。内部エラーやSQL情報はレスポンスへ含めません。これらは現時点の基盤用レスポンスであり、業務API全体の共通エラーレスポンス形式は未確定です。
+
+起動時に `DATABASE_URL` と `ALLOWED_ORIGINS` を必須環境変数として検証し、`PORT` は未指定時に `8080` を使用します。許可Originはカンマ区切りで明示し、ワイルドカードは受け付けません。現時点ではcredentialを許可せず、本番Cookie属性、CSRF方式、Vercel Preview URLの扱いは認証方式とあわせて別Issueで決定します。
+
+HTTPサーバーはOSの終了シグナルを受けると10秒を上限にgraceful shutdownし、その後にDB接続を閉じます。起動失敗は通常停止と区別してエラーにします。
 
 ### 4.2 MVPの業務API設計案（すべて未実装）
 
@@ -217,7 +223,7 @@ Mermaidの属性表現では複合一意制約を表しにくいため、`HEALTH
 
 1. 確定したcondition・timingコード、ID境界、manager表現に基づいてDTOと入力検証を定義する
 2. GORMモデルとマイグレーションを実装する
-3. Ginを導入し、MVP業務APIを画面単位で実装する
+3. Gin上へMVP業務APIを画面単位で実装する
 4. 認証と、role・担当関係に基づくサーバー側認可を実装する
 5. フロントエンドのモック状態をAPI接続へ置き換える
 6. Render / Supabaseの構成と公開環境を整備する
