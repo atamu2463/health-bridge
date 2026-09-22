@@ -74,6 +74,7 @@ func TestParseAllowedOriginsRejectsNonCanonicalOrigins(t *testing.T) {
 	}{
 		{name: "HTTP以外のscheme", value: "ftp://example.com"},
 		{name: "Hostなし", value: "https://"},
+		{name: "ホスト名なし", value: "http://:80"},
 		{name: "ワイルドカード", value: "*"},
 		{name: "ユーザー情報", value: "https://user@example.com"},
 		{name: "パス", value: "https://example.com/path"},

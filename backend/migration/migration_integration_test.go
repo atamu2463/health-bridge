@@ -255,8 +255,10 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 		wantError bool
 	}{
 		{name: "通常コメント", comment: "体調は良好です"},
+		{name: "文字vだけ", comment: "v"},
 		{name: "空文字", comment: "", wantError: true},
 		{name: "空白文字だけ", comment: " \t\n", wantError: true},
+		{name: "垂直タブだけ", comment: "\v", wantError: true},
 		{name: "500文字", comment: strings.Repeat("a", 500)},
 		{name: "501文字", comment: strings.Repeat("a", 501), wantError: true},
 	}

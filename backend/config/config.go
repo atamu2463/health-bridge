@@ -85,7 +85,7 @@ func parseAllowedOrigins(value string) ([]string, error) {
 
 		canonicalOrigin := parsed.Scheme + "://" + parsed.Host
 		if (parsed.Scheme != "http" && parsed.Scheme != "https") ||
-			parsed.Host == "" || parsed.User != nil ||
+			parsed.Host == "" || parsed.Hostname() == "" || parsed.User != nil ||
 			parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" ||
 			origin != canonicalOrigin {
 			return nil, fmt.Errorf("環境変数 ALLOWED_ORIGINS に不正なOriginが含まれています")
