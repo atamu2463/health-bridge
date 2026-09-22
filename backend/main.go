@@ -1,59 +1,73 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"backend/config"
+
+	"github.com/gin-gonic/gin"
 )
 
-const serverAddress = ":8080"
+const (
+	readTimeout       = 5 * time.Second
+	readHeaderTimeout = 5 * time.Second
+	writeTimeout      = 10 * time.Second
+	idleTimeout       = 60 * time.Second
+	shutdownTimeout   = 10 * time.Second
+)
 
-// /health はHTTPプロセスの稼働確認に限定し、DB接続はサーバー起動前に検証する。
-func healthHandler(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
+// OSシグナルと終了コードだけを扱い、初期化から停止までの処理はrunServerへ集約する。
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	if _, err := fmt.Fprintln(w, "OK"); err != nil {
-		log.Printf("ヘルスチェックのレスポンス送信に失敗しました: %v", err)
+	if err := runServer(ctx); err != nil {
+		log.Printf("バックエンドを終了しました: %v", err)
+		os.Exit(1)
 	}
 }
 
-func newRouter() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", healthHandler)
-
-	return mux
-}
-
-func main() {
-	db, err := config.ConnectDB()
+func runServer(ctx context.Context) (runErr error) {
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("DB接続に失敗しました", err)
+		return err
+	}
+
+	db, err := config.ConnectDB(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("DB接続に失敗しました: %w", err)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		log.Fatal("DBインスタンスの取得に失敗しました", err)
+		return fmt.Errorf("DBインスタンスの取得に失敗しました: %w", err)
 	}
+	defer func() {
+		if err := sqlDB.Close(); err != nil && runErr == nil {
+			runErr = fmt.Errorf("DB接続の終了に失敗しました: %w", err)
+		}
+	}()
 
-	fmt.Println("DB接続に成功しました")
+	gin.SetMode(gin.ReleaseMode)
 
-	defer sqlDB.Close()
-
-	// ヘッダー送信が完了しない接続による、サーバー資源の占有を防止する。
+	// ヘッダー送信が完了しない接続によるサーバー資源の占有を防止する。
 	server := &http.Server{
-		Addr:              serverAddress,
-		Handler:           newRouter(),
-		ReadTimeout:       5 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
+		Addr:              ":" + cfg.Port,
+		Handler:           newRouter(cfg.AllowedOrigins),
+		ReadTimeout:       readTimeout,
+		ReadHeaderTimeout: readHeaderTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
 	}
 
-	log.Printf("HTTPサーバーを起動しました: http://localhost%s", serverAddress)
+	log.Printf("HTTPサーバーを起動しました: port=%s", cfg.Port)
 
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatalf("HTTPサーバーの起動に失敗しました: %v", err)
-	}
+	return serve(ctx, server, shutdownTimeout)
 }
