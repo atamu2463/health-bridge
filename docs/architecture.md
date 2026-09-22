@@ -91,8 +91,10 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 #### 認証・セッション
 
 - JWTは使用せず、PostgreSQLで管理するサーバー側セッション方式とする
-- パスワードはbcryptでハッシュ化し、平文では保存しない
-- ログイン成功時は推測困難なセッショントークンを生成し、DBにはトークンそのものではなくハッシュ値を保存する
+- パスワードはbcryptでハッシュ化し、平文では保存しない。bcryptはパスワードに使用し、セッショントークンには使用しない
+- ログイン成功時は `crypto/rand` で32バイトのランダム値を生成し、Base64 URL形式にエンコードしたセッショントークンをCookieへ格納する
+- DBにはセッショントークンそのものではなくSHA-256ダイジェストを保存する
+- 認証時はCookieのトークンから同じSHA-256ダイジェストを生成し、対象セッションを検索する
 - セッション有効期限は24時間とする
 - ログアウト時は対象セッションをDBから削除し、Cookieを失効させる
 - 未認証、トークン不正、セッション無効または期限切れの場合は `401 Unauthorized` とする
@@ -102,12 +104,16 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 
 #### Cookie・CORS・CSRF
 
-- Cookie名は `health_bridge_session` とし、`HttpOnly` を設定する
+- Cookie名は `health_bridge_session` とし、`HttpOnly`、`Path=/api` を設定する
+- Cookieの発行と失効には同じCookie名と `Path=/api` を使用する
 - 本番環境は `Secure=true`、`SameSite=None` とする
 - ローカル環境はHTTPで検証できるCookie設定へ切り替え、Cookie属性を環境ごとに設定できるようにする
 - フロントエンドは認証が必要なリクエストで `credentials: "include"` を使用する
 - credential付きCORSではワイルドカードOriginを使用せず、環境変数で明示した許可Originだけを `Access-Control-Allow-Origin` に設定する
 - Cookieを送受信できるよう、許可Originへの応答だけに `Access-Control-Allow-Credentials: true` を設定する
+- クロスオリジンの状態変更リクエストで発生する `OPTIONS` preflightへ応答し、`Access-Control-Allow-Methods` に `GET`、`POST`、`PUT`、`PATCH`、`DELETE`、`OPTIONS` を設定する
+- JSONリクエストでは `Content-Type: application/json` を使用し、`Access-Control-Allow-Headers` に `Content-Type` を設定する
+- 将来ほかの非単純ヘッダーを使用する場合は、`Access-Control-Allow-Headers` へ対象ヘッダーを明示的に追加する
 - CSRF対策として、`POST`、`PUT`、`PATCH`、`DELETE` の状態変更リクエストでは `Origin` が許可Originと一致することを検証する
 - `GET`は参照専用とし、データを変更しない
 
@@ -116,6 +122,7 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 - 認証済みユーザーのIDとroleはセッションから特定し、クライアントが送信したrole、user ID、manager IDを認可根拠として信用しない
 - employeeは本人の情報と体調記録だけを参照・操作できる
 - managerはDB上で現在担当しているemployeeだけを参照・操作できる
+- API-13の引き継ぎ先は、DB上で `role = manager` かつ `is_active = true` のユーザーに限定し、API側で検証する
 - 担当managerを変更した後は、旧managerによる参照・操作を `403 Forbidden` とする
 - 認証済みでもroleまたは担当範囲が許可されない場合は `403 Forbidden` とする
 - 無効化済みemployeeは通常の担当一覧から除外し、無効化前のアカウント情報と体調記録は保持する
@@ -171,7 +178,7 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 
 次の事項は本対応では確定せず、関連実装前に別途判断します。これらを決める場合も、上記の確定方針は変更しません。
 
-- セッショントークンの生成長、ハッシュ方式、期限切れセッションの削除方法
+- 期限切れセッションの削除方法
 - bcryptのcostとmanager作成CLIのコマンドインターフェース
 - ローカル環境の `SameSite` 設定とVercel Preview URLを許可Originへ登録する運用
 - 無効化済みユーザーは既存セッションでも認証を許可しない。セッション行を削除するタイミングは関連実装時に決定する

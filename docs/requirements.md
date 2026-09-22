@@ -109,6 +109,7 @@ developに存在する利用者向けUIも、MVP機能と混同しないよう�
 - 1人のemployeeへ現在の担当managerを1人設定する
 - DBでは `users.manager_id` によって担当managerと関連付け、氏名文字列だけを関連付けに使用しない
 - managerは自身の担当employeeだけを参照・更新できる設計とし、API側でも検証する
+- API-13の引き継ぎ先は、DB上で `role = manager` かつ `is_active = true` のユーザーに限定し、API側で検証する
 - 担当変更後は旧managerから対象employeeを参照・更新できない
 - employee作成時は、作成したmanagerを初期担当者とする
 - 担当変更後もemployeeアカウントと過去の体調記録を保持する
@@ -137,10 +138,13 @@ managerの表示例：
 ### 5.5 認証・セッション（設計済み・未実装）
 
 - JWTは使用せず、PostgreSQLで管理するサーバー側セッション方式とする
-- パスワードはbcryptでハッシュ化し、平文では保存しない
-- ログイン時に推測困難なセッショントークンを生成し、DBにはトークンそのものではなくハッシュ値を保存する
+- パスワードはbcryptでハッシュ化し、平文では保存しない。bcryptはパスワードに使用し、セッショントークンには使用しない
+- ログイン時は `crypto/rand` で32バイトのランダム値を生成し、Base64 URL形式にエンコードしたセッショントークンをCookieへ格納する
+- DBにはセッショントークンそのものではなくSHA-256ダイジェストを保存する
+- 認証時はCookieのトークンから同じSHA-256ダイジェストを生成し、対象セッションを検索する
 - セッション有効期限は24時間とし、ログアウト時は対象セッションを削除してCookieを失効させる
-- Cookie名は `health_bridge_session` とし、JavaScriptから読み取れないよう `HttpOnly` を設定する
+- Cookie名は `health_bridge_session` とし、JavaScriptから読み取れないよう `HttpOnly`、`Path=/api` を設定する
+- Cookieの発行と失効には同じCookie名と `Path=/api` を使用する
 - 本番環境は `Secure=true`、`SameSite=None` とし、ローカル環境はHTTPで検証できる設定へ切り替える
 - managerはMVPでは管理用CLIで作成する。一般登録、組織用招待コード、メール認証はMVP対象外とする
 - 現在のmanager登録画面はモックUIとして残すが、実APIへは接続しない
@@ -149,6 +153,9 @@ managerの表示例：
 
 - フロントエンドはCookieを送信するリクエストで `credentials: "include"` を使用する
 - credential付きCORSではワイルドカードOriginを使用せず、環境変数で許可したOriginだけを応答に設定する
+- クロスオリジンの状態変更リクエストで発生する `OPTIONS` preflightへ応答し、`Access-Control-Allow-Methods` に `GET`、`POST`、`PUT`、`PATCH`、`DELETE`、`OPTIONS` を設定する
+- JSONリクエストでは `Content-Type: application/json` を使用し、`Access-Control-Allow-Headers` に `Content-Type` を設定する
+- 将来ほかの非単純ヘッダーを使用する場合は、`Access-Control-Allow-Headers` へ対象ヘッダーを明示的に追加する
 - CSRF対策として、`POST`、`PUT`、`PATCH`、`DELETE` の状態変更リクエストでは `Origin` が許可Originと一致することをAPI側で検証し、GETではデータを変更しない
 - 未認証、無効または期限切れのセッションは `401 Unauthorized`、認証済みで権限がない場合は `403 Forbidden` とする
 - 認証時にユーザーの有効状態を確認し、無効化済みユーザーは既存セッションが残っていても認証を許可せず `401 Unauthorized` とする
