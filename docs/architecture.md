@@ -6,7 +6,7 @@
 
 - 参照資料：Googleドキュメント[「【Docs】体調管理・共有アプリ」](https://docs.google.com/document/d/1EKeJU0Jydtram7yDto50QVDMukCxzGgsQxHxHNcGDyk/edit?tab=t.0)の「要件定義・技術選定 v2（再レビュー用）」「画面設計 v2（再レビュー用）」「DB設計v2」「API設計v2」「2026.09.17MTG」
 - 資料参照日：2026年9月18日
-- 判断基準：第2回レビュー後の決定、Issue #110 / #112の反映内容、現在のコードをv2案より優先
+- 判断基準：第2回レビュー後の決定、Issue #110 / #112 / #133の反映内容、現在のコードをv2案より優先
 
 業務API設計は実装前のものです。DBモデル、マイグレーション、マスターデータは実装済みですが、現時点で実装済みのバックエンドAPIは `GET /health` だけであり、以下に並べる業務APIと認証・認可は未実装です。
 
@@ -23,7 +23,7 @@ Frontend: Next.js / React / TypeScript
         ▼
 Backend: Go / Gin / GORM
 現在: GET /health、共通middleware、graceful shutdown、DBモデル／マイグレーション
-予定: Ginによる業務API、Renderへ配置
+予定: PostgreSQLセッション認証、Ginによる業務API、Renderへ配置
         │
         │ SQL / GORM
         ▼
@@ -45,7 +45,7 @@ PostgreSQL
 | 業務API | アカウント・体調記録・担当関係の処理 | 設計済み・未実装 |
 | 開発DB | ローカル開発データの保存 | Docker ComposeでPostgreSQLを構成。4テーブルとマスターデータを明示コマンドで作成可能 |
 | 本番DB | 公開環境のデータ保存 | Supabase上のPostgreSQLを使用予定、未構築 |
-| 認証・認可 | ロール・担当関係に基づく制御 | 未実装。ログイン、401、403は画面のみ |
+| 認証・認可 | PostgreSQLセッションとロール・担当関係に基づく制御 | 設計済み・未実装。ログイン、401、403は画面のみ |
 
 ## 4. API
 
@@ -57,9 +57,9 @@ PostgreSQL
 
 サーバー起動前にDB接続を行いますが、`GET /health` のハンドラー自体はDBへ問い合わせません。
 
-ルーターは起動処理から分離しています。GinのLoggerとRecoveryを使用し、未定義ルートは `404`、panic時は `500` の安全なJSONを返します。内部エラーやSQL情報はレスポンスへ含めません。これらは現時点の基盤用レスポンスであり、業務API全体の共通エラーレスポンス形式は未確定です。
+ルーターは起動処理から分離しています。GinのLoggerとRecoveryを使用し、未定義ルートは `404`、panic時は `500` の安全なJSONを返します。内部エラーやSQL情報はレスポンスへ含めません。現在の基盤用エラーは単純な `{"error":"..."}` 形式であり、4.3で設計する共通形式への移行は未実装です。
 
-起動時に `DATABASE_URL` と `ALLOWED_ORIGINS` を必須環境変数として検証し、`PORT` は未指定時に `8080` を使用します。許可Originはカンマ区切りで明示し、ワイルドカードは受け付けません。現時点ではcredentialを許可せず、本番Cookie属性、CSRF方式、Vercel Preview URLの扱いは認証方式とあわせて別Issueで決定します。
+起動時に `DATABASE_URL` と `ALLOWED_ORIGINS` を必須環境変数として検証し、`PORT` は未指定時に `8080` を使用します。許可Originはカンマ区切りで明示し、ワイルドカードは受け付けません。現在のCORS middlewareはcredentialを許可せず、`GET` と `OPTIONS` だけを対象としています。Cookie認証に対応するCORS・CSRF処理は4.3のとおり設計済み・未実装です。
 
 HTTPサーバーはOSの終了シグナルを受けると10秒を上限にgraceful shutdownし、その後にDB接続を閉じます。起動失敗は通常停止と区別してエラーにします。
 
@@ -67,7 +67,6 @@ HTTPサーバーはOSの終了シグナルを受けると10秒を上限にgracef
 
 | API ID | メソッド | パス | 目的 | 役割・データ範囲 | 関連機能 |
 | --- | --- | --- | --- | --- | --- |
-| API-01 | `POST` | `/api/managers` | managerアカウントを作成 | manager本人が登録。登録資格の確認方法は本番API実装前に決定 | F-01 |
 | API-02 | `POST` | `/api/auth/login` | メールアドレスとパスワードでログイン | 認証不要 | F-02 |
 | API-03 | `POST` | `/api/auth/logout` | ログイン状態を終了 | ログイン済みユーザー | F-02 |
 | API-04 | `POST` | `/api/employees` | employeeを作成し、実行者を担当managerに設定 | managerのみ | F-03 |
@@ -83,9 +82,72 @@ HTTPサーバーはOSの終了シグナルを受けると10秒を上限にgracef
 
 担当関係は、作成時（API-04）、担当範囲の参照・更新（API-05〜07、10、11）、担当変更（API-12、13）にまたがります。画面に対象IDが含まれていても信用せず、API側でログインユーザーのroleと `users.manager_id` を照合する必要があります。
 
+旧API-01のmanager一般登録はMVP対象外とし、API IDは別機能へ再利用しません。managerは未実装の管理用CLIで作成し、パスワードをbcryptでハッシュ化して保存します。既存のmanager登録画面はモックUIとして残しますが、実APIへは接続しません。組織用招待コードとメール認証は将来拡張です。
+
 API-14「チーム体調傾向」は現行MVPから除外済みのため、業務APIへ追加しません。機能IDと同様にAPI IDも別機能へ再利用しません。
 
-### 4.3 API共通表現（確定・未実装）
+### 4.3 認証・認可とAPI共通仕様（設計済み・未実装）
+
+#### 認証・セッション
+
+- JWTは使用せず、PostgreSQLで管理するサーバー側セッション方式とする
+- パスワードはbcryptでハッシュ化し、平文では保存しない。bcryptはパスワードに使用し、セッショントークンには使用しない
+- ログイン成功時は `crypto/rand` で32バイトのランダム値を生成し、Base64 URL形式にエンコードしたセッショントークンをCookieへ格納する
+- DBにはセッショントークンそのものではなくSHA-256ダイジェストを保存する
+- 認証時はCookieのトークンから同じSHA-256ダイジェストを生成し、対象セッションを検索する
+- セッション有効期限は24時間とする
+- ログアウト時は対象セッションをDBから削除し、Cookieを失効させる
+- 未認証、トークン不正、セッション無効または期限切れの場合は `401 Unauthorized` とする
+- 認証時にユーザーの有効状態を確認し、無効化済みユーザーは既存セッションが残っていても認証を許可せず `401 Unauthorized` とする
+
+セッション保存用テーブル、認証middleware、ログイン・ログアウト処理、bcrypt処理、manager作成CLIはいずれも未実装です。
+
+#### Cookie・CORS・CSRF
+
+- Cookie名は `health_bridge_session` とし、`HttpOnly`、`Path=/api` を設定する
+- Cookieの発行と失効には同じCookie名と `Path=/api` を使用する
+- 本番環境は `Secure=true`、`SameSite=None` とする
+- ローカル環境はHTTPで検証できるCookie設定へ切り替え、Cookie属性を環境ごとに設定できるようにする
+- フロントエンドは認証が必要なリクエストで `credentials: "include"` を使用する
+- credential付きCORSではワイルドカードOriginを使用せず、環境変数で明示した許可Originだけを `Access-Control-Allow-Origin` に設定する
+- Cookieを送受信できるよう、許可Originへの応答だけに `Access-Control-Allow-Credentials: true` を設定する
+- クロスオリジンの状態変更リクエストで発生する `OPTIONS` preflightへ応答し、`Access-Control-Allow-Methods` に `GET`、`POST`、`PUT`、`PATCH`、`DELETE`、`OPTIONS` を設定する
+- JSONリクエストでは `Content-Type: application/json` を使用し、`Access-Control-Allow-Headers` に `Content-Type` を設定する
+- 将来ほかの非単純ヘッダーを使用する場合は、`Access-Control-Allow-Headers` へ対象ヘッダーを明示的に追加する
+- CSRF対策として、`POST`、`PUT`、`PATCH`、`DELETE` の状態変更リクエストでは `Origin` が許可Originと一致することを検証する
+- `GET`は参照専用とし、データを変更しない
+
+#### 認可
+
+- 認証済みユーザーのIDとroleはセッションから特定し、クライアントが送信したrole、user ID、manager IDを認可根拠として信用しない
+- employeeは本人の情報と体調記録だけを参照・操作できる
+- managerはDB上で現在担当しているemployeeだけを参照・操作できる
+- API-13の引き継ぎ先は、DB上で `role = manager` かつ `is_active = true` のユーザーに限定し、API側で検証する
+- 担当managerを変更した後は、旧managerによる参照・操作を `403 Forbidden` とする
+- 認証済みでもroleまたは担当範囲が許可されない場合は `403 Forbidden` とする
+- 無効化済みemployeeは通常の担当一覧から除外し、無効化前のアカウント情報と体調記録は保持する
+
+#### 日付・時刻
+
+- 業務上の「今日」と日付範囲は `Asia/Tokyo` を基準に判定する
+- 体調記録の `record_date` と、週・月・指定日の期間条件は同じ日付境界を使用する
+
+#### 共通エラーレスポンス
+
+業務APIのエラーは、原則として次の形式で返します。HTTPステータスでエラー種別を示し、`code`はフロントエンドの分岐、`message`は利用者向け表示に使用します。
+
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "リクエスト内容を確認してください"
+  }
+}
+```
+
+利用者向けレスポンスには内部エラーの詳細を含めません。サーバーログには調査に必要な情報を残しますが、パスワード、セッショントークン、DB接続情報などの秘密情報、リクエスト・レスポンス本文、体調情報、コメント、メールアドレス、氏名などの健康情報・個人情報は出力しません。調査には内部IDなど、業務データそのものを含まない識別情報を使用します。
+
+#### API共通表現
 
 - APIのリクエスト・レスポンスではIDを文字列として表現する
 - パスパラメータも文字列として受け取り、バックエンドで妥当な整数IDへ変換・検証してからDB処理に使用する
@@ -114,19 +176,19 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 | ID | DBは整数、APIは文字列 | `new-...` を廃止し、APIが返すIDへ置き換える |
 | 担当manager | DBは `users.manager_id`、表示APIは `{ id, name }` | 氏名文字列だけの関連付けを廃止し、IDで識別する |
 
-次の事項は本対応では確定せず、関連APIの実装前に別途判断します。
+次の事項は本対応では確定せず、関連実装前に別途判断します。これらを決める場合も、上記の確定方針は変更しません。
 
-- manager登録資格の確認方法
-- 認証・セッション方式とCookie、CORS、CSRFの方針
-- 共通エラーレスポンス形式
-- `record_date`、日付境界、タイムゾーン、期間指定の詳細
+- 期限切れセッションの削除方法
+- bcryptのcostとmanager作成CLIのコマンドインターフェース
+- ローカル環境の `SameSite` 設定とVercel Preview URLを許可Originへ登録する運用
+- 無効化済みユーザーは既存セッションでも認証を許可しない。セッション行を削除するタイミングは関連実装時に決定する
 - 無効化後の履歴参照、担当変更履歴、同時更新の扱い
 - デモデータ、本番データの投入方法とRender／Supabase構成
 - manager自身の編集・削除UIと、到達不能な従業員検索・追加ダイアログのMVP上の扱い
 
-## 5. DB設計（実装済み）
+## 5. DB設計（既存4テーブルは実装済み）
 
-DB設計v2を第2回レビュー後のMVPと照合し、次の4テーブルをGORMモデルとPostgreSQLスキーマとして実装しています。チーム集計用テーブル、担当変更履歴、認証用テーブルは追加していません。
+DB設計v2を第2回レビュー後のMVPと照合し、次の4テーブルをGORMモデルとPostgreSQLスキーマとして実装しています。チーム集計用テーブル、担当変更履歴、セッション保存用テーブルは追加していません。セッションはPostgreSQLへ保存する設計ですが、テーブル定義とマイグレーションは認証実装時に追加します。
 
 ### 5.1 テーブル概要
 
@@ -232,11 +294,12 @@ Mermaidの属性表現では複合一意制約を表しにくいため、`HEALTH
 
 ## 7. 今後の実装順序
 
-1. 確定したcondition・timingコード、ID境界、manager表現に基づいてDTOと入力検証を定義する
-2. Gin上へMVP業務APIを画面単位で実装する
-3. 認証と、role・担当関係に基づくサーバー側認可を実装する
-4. フロントエンドのモック状態をAPI接続へ置き換える
-5. Render / Supabaseの構成と公開環境を整備する
-6. API・DB・画面を通したテストとCIを整備する
+1. セッション保存用テーブル、manager作成CLI、ログイン・ログアウトを実装する
+2. Cookie、credential付きCORS、Origin検証、共通エラー、認証・認可middlewareを実装する
+3. 確定したcondition・timingコード、ID境界、manager表現に基づいてDTOと入力検証を定義する
+4. Gin上へMVP業務APIを画面単位で実装する
+5. フロントエンドのモック状態をAPI接続へ置き換える
+6. Render / Supabaseの構成と公開環境を整備する
+7. API・DB・画面を通したテストとCIを整備する
 
 機能・設計変更時はREADMEと関連docsも同じIssueで更新します。独立した設計変更や、本書に残した未確定事項・未定義UI等の不整合は、アプリ実装とは分けてIssueで追跡します。
