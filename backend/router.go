@@ -12,6 +12,7 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+// アクセスログ、panic復旧、CORSを全ルートへ一貫して適用する。
 func newRouter(allowedOrigins []string) *gin.Engine {
 	router := gin.New()
 	router.Use(
@@ -34,11 +35,11 @@ func newRouter(allowedOrigins []string) *gin.Engine {
 	return router
 }
 
-// healthHandler はHTTPプロセスの稼働確認に限定し、DBへは問い合わせない。
 func healthHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
+// 許可したブラウザーOriginだけにレスポンスの読み取りを認める。
 func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
 	allowed := make(map[string]struct{}, len(allowedOrigins))
 	for _, origin := range allowedOrigins {

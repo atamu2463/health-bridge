@@ -13,7 +13,6 @@ func ConnectDB(databaseURL string) (*gorm.DB, error) {
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
-		// 接続文字列や認証情報がエラー本文へ含まれる可能性があるため、詳細は返さない。
 		return nil, errors.New("PostgreSQLへの接続を確認できません")
 	}
 

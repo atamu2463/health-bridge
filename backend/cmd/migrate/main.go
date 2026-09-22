@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	if err := runMigration(); err != nil {
 		log.Printf("マイグレーションに失敗しました: %v", err)
 		os.Exit(1)
 	}
@@ -18,7 +18,7 @@ func main() {
 	log.Print("マイグレーションとマスターデータ投入が完了しました")
 }
 
-func run() (runErr error) {
+func runMigration() (runErr error) {
 	databaseURL, err := config.LoadDatabaseURL()
 	if err != nil {
 		return err

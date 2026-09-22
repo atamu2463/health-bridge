@@ -16,6 +16,7 @@ type Config struct {
 	AllowedOrigins []string
 }
 
+// HTTPサーバーに必要な環境変数を起動前に検証し、利用可能な設定だけを返す。
 func Load() (Config, error) {
 	databaseURL, err := LoadDatabaseURL()
 	if err != nil {
@@ -47,6 +48,7 @@ func Load() (Config, error) {
 	}, nil
 }
 
+// HTTPサーバー以外のDB利用コマンドでも接続設定だけを読み込めるようにする。
 func LoadDatabaseURL() (string, error) {
 	return requiredEnvironmentVariable("DATABASE_URL")
 }

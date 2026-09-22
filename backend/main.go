@@ -23,17 +23,18 @@ const (
 	shutdownTimeout   = 10 * time.Second
 )
 
+// OSシグナルと終了コードだけを扱い、初期化から停止までの処理はrunServerへ集約する。
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx); err != nil {
+	if err := runServer(ctx); err != nil {
 		log.Printf("バックエンドを終了しました: %v", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context) (runErr error) {
+func runServer(ctx context.Context) (runErr error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -54,8 +55,9 @@ func run(ctx context.Context) (runErr error) {
 		}
 	}()
 
-	// ヘッダー送信が完了しない接続による、サーバー資源の占有を防止する。
 	gin.SetMode(gin.ReleaseMode)
+
+	// ヘッダー送信が完了しない接続によるサーバー資源の占有を防止する。
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           newRouter(cfg.AllowedOrigins),
