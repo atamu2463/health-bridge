@@ -9,6 +9,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// seedMasterDataは一意キーを基準に競合を処理し、複数回実行しても重複を作らない。
+// 既存roleは保持し、conditionの表示内容はコードを変えずに定義へ同期する。
 func seedMasterData(db *gorm.DB) error {
 	roles := []model.Role{
 		{Name: model.RoleNameManager},
