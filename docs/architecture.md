@@ -205,7 +205,7 @@ DB設計v2を第2回レビュー後のMVPと照合し、次の4テーブルをGO
 - `users.manager_id` はnullableな自己参照とし、employeeの現在の担当managerを示す。manager自身は `NULL` とする
 - `health_records` に `UNIQUE (employee_id, record_date, timing)` を設定する
 - `timing` は `CHECK (timing IN ('clockIn', 'clockOut'))` とする
-- コメントは必須とし、`VARCHAR(500) NOT NULL` とする
+- コメントは必須とし、`VARCHAR(500) NOT NULL` とする。空文字および空白文字だけのコメントは `CHECK` 制約で拒否する
 - 「未入力」は `conditions` に追加せず、該当する `health_records` が存在しない状態として判定する
 - 「未入力」絞り込みは、指定日の `clockIn` が存在しないemployeeを対象とする仮仕様
 - 担当変更時は `users.manager_id` を更新し、employeeアカウントと過去の体調記録を保持する

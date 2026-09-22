@@ -42,6 +42,12 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 			if err := migration.Run(tx); err != nil {
 				return fmt.Errorf("2回目のmigration.Run()に失敗しました: %w", err)
 			}
+			if !tx.Migrator().HasConstraint(
+				&model.HealthRecord{},
+				"chk_health_records_comment_not_blank",
+			) {
+				return errors.New("health_records.commentのCHECK制約が作成されていません")
+			}
 
 			for _, table := range []any{
 				&model.Role{},
@@ -243,26 +249,48 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 		})
 	})
 
-	t.Run("health recordのcomment文字数制約", func(t *testing.T) {
-		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
-			employee, condition, err := createHealthRecordReferences(tx, "comment")
-			if err != nil {
-				return err
-			}
+	commentTests := []struct {
+		name      string
+		comment   string
+		wantError bool
+	}{
+		{name: "通常コメント", comment: "体調は良好です"},
+		{name: "文字vだけ", comment: "v"},
+		{name: "空文字", comment: "", wantError: true},
+		{name: "空白文字だけ", comment: " \t\n", wantError: true},
+		{name: "垂直タブだけ", comment: "\v", wantError: true},
+		{name: "500文字", comment: strings.Repeat("a", 500)},
+		{name: "501文字", comment: strings.Repeat("a", 501), wantError: true},
+	}
 
-			err = tx.Create(&model.HealthRecord{
-				EmployeeID:  employee.ID,
-				RecordDate:  time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC),
-				Timing:      model.HealthRecordTimingClockOut,
-				ConditionID: condition.ID,
-				Comment:     strings.Repeat("a", 501),
-			}).Error
-			if err == nil {
-				return errors.New("health_records.commentの501文字が拒否されませんでした")
-			}
-			return nil
+	for index, tt := range commentTests {
+		t.Run("health recordのcomment制約/"+tt.name, func(t *testing.T) {
+			withMigratedDatabase(t, db, func(tx *gorm.DB) error {
+				employee, condition, err := createHealthRecordReferences(
+					tx,
+					fmt.Sprintf("comment-%d", index),
+				)
+				if err != nil {
+					return err
+				}
+
+				err = tx.Create(&model.HealthRecord{
+					EmployeeID:  employee.ID,
+					RecordDate:  time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC),
+					Timing:      model.HealthRecordTimingClockOut,
+					ConditionID: condition.ID,
+					Comment:     tt.comment,
+				}).Error
+				if tt.wantError && err == nil {
+					return fmt.Errorf("health_records.commentの%sが拒否されませんでした", tt.name)
+				}
+				if !tt.wantError && err != nil {
+					return fmt.Errorf("health_records.commentの%sが保存できませんでした: %w", tt.name, err)
+				}
+				return nil
+			})
 		})
-	})
+	}
 }
 
 func withMigratedDatabase(t *testing.T, db *gorm.DB, verify func(*gorm.DB) error) {

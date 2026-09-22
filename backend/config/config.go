@@ -79,9 +79,15 @@ func parseAllowedOrigins(value string) ([]string, error) {
 	for _, part := range parts {
 		origin := strings.TrimSpace(part)
 		parsed, err := url.Parse(origin)
-		if err != nil ||
-			(parsed.Scheme != "http" && parsed.Scheme != "https") ||
-			parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		if err != nil {
+			return nil, fmt.Errorf("環境変数 ALLOWED_ORIGINS に不正なOriginが含まれています")
+		}
+
+		canonicalOrigin := parsed.Scheme + "://" + parsed.Host
+		if (parsed.Scheme != "http" && parsed.Scheme != "https") ||
+			parsed.Host == "" || parsed.Hostname() == "" || parsed.User != nil ||
+			parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" ||
+			origin != canonicalOrigin {
 			return nil, fmt.Errorf("環境変数 ALLOWED_ORIGINS に不正なOriginが含まれています")
 		}
 
