@@ -47,6 +47,8 @@ func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		c.Writer.Header().Add("Vary", "Origin")
+
 		origin := c.GetHeader("Origin")
 		if origin == "" {
 			c.Next()
@@ -67,7 +69,6 @@ func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
 		}
 
 		c.Header("Access-Control-Allow-Origin", origin)
-		c.Header("Vary", "Origin")
 
 		if c.Request.Method == http.MethodOptions {
 			c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")

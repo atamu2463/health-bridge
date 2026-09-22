@@ -116,6 +116,56 @@ func TestCORSPreflight(t *testing.T) {
 			if allowCredentials := response.Header().Get("Access-Control-Allow-Credentials"); allowCredentials != "" {
 				t.Fatalf("Access-Control-Allow-Credentials = %q, want empty", allowCredentials)
 			}
+			if vary := response.Header().Get("Vary"); vary != "Origin" {
+				t.Fatalf("Vary = %q, want %q", vary, "Origin")
+			}
+		})
+	}
+}
+
+func TestCORSVaryOrigin(t *testing.T) {
+	tests := []struct {
+		name            string
+		origin          string
+		wantAllowOrigin string
+	}{
+		{
+			name:            "許可したOrigin",
+			origin:          testAllowedOrigin,
+			wantAllowOrigin: testAllowedOrigin,
+		},
+		{
+			name:   "許可していないOrigin",
+			origin: "https://example.com",
+		},
+		{
+			name: "Originなし",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, "/health", nil)
+			if tt.origin != "" {
+				request.Header.Set("Origin", tt.origin)
+			}
+			response := httptest.NewRecorder()
+
+			newRouter([]string{testAllowedOrigin}).ServeHTTP(response, request)
+
+			if response.Code != http.StatusOK {
+				t.Fatalf("status code = %d, want %d", response.Code, http.StatusOK)
+			}
+			if vary := response.Header().Get("Vary"); vary != "Origin" {
+				t.Fatalf("Vary = %q, want %q", vary, "Origin")
+			}
+			if allowOrigin := response.Header().Get("Access-Control-Allow-Origin"); allowOrigin != tt.wantAllowOrigin {
+				t.Fatalf(
+					"Access-Control-Allow-Origin = %q, want %q",
+					allowOrigin,
+					tt.wantAllowOrigin,
+				)
+			}
 		})
 	}
 }

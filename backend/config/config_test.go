@@ -44,6 +44,55 @@ func TestLoadUsesDefaultPort(t *testing.T) {
 	}
 }
 
+func TestParseAllowedOriginsAcceptsCanonicalOrigins(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "HTTPとport", value: "http://localhost:3000"},
+		{name: "HTTPS", value: "https://example.com"},
+		{name: "HTTPSとport", value: "https://example.com:8443"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origins, err := parseAllowedOrigins(tt.value)
+			if err != nil {
+				t.Fatalf("parseAllowedOrigins() error = %v", err)
+			}
+			if !reflect.DeepEqual(origins, []string{tt.value}) {
+				t.Fatalf("parseAllowedOrigins() = %#v, want %#v", origins, []string{tt.value})
+			}
+		})
+	}
+}
+
+func TestParseAllowedOriginsRejectsNonCanonicalOrigins(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "HTTP以外のscheme", value: "ftp://example.com"},
+		{name: "Hostなし", value: "https://"},
+		{name: "ワイルドカード", value: "*"},
+		{name: "ユーザー情報", value: "https://user@example.com"},
+		{name: "パス", value: "https://example.com/path"},
+		{name: "末尾slash", value: "https://example.com/"},
+		{name: "クエリ", value: "https://example.com?key=value"},
+		{name: "空のクエリ", value: "https://example.com?"},
+		{name: "フラグメント", value: "https://example.com#fragment"},
+		{name: "不正なURL", value: "https://example.com/%"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := parseAllowedOrigins(tt.value); err == nil {
+				t.Fatal("parseAllowedOrigins() error = nil, want error")
+			}
+		})
+	}
+}
+
 func TestLoadDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://user:password@db:5432/health_bridge")
 
