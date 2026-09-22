@@ -153,6 +153,7 @@ managerの表示例：
 
 - フロントエンドはCookieを送信するリクエストで `credentials: "include"` を使用する
 - credential付きCORSではワイルドカードOriginを使用せず、環境変数で許可したOriginだけを応答に設定する
+- Cookieを送受信できるよう、許可Originへの応答だけに `Access-Control-Allow-Credentials: true` を設定する
 - クロスオリジンの状態変更リクエストで発生する `OPTIONS` preflightへ応答し、`Access-Control-Allow-Methods` に `GET`、`POST`、`PUT`、`PATCH`、`DELETE`、`OPTIONS` を設定する
 - JSONリクエストでは `Content-Type: application/json` を使用し、`Access-Control-Allow-Headers` に `Content-Type` を設定する
 - 将来ほかの非単純ヘッダーを使用する場合は、`Access-Control-Allow-Headers` へ対象ヘッダーを明示的に追加する
