@@ -14,6 +14,8 @@ type Config struct {
 	Port           string
 	DatabaseURL    string
 	AllowedOrigins []string
+	CookieSecure   bool
+	IsRender       bool
 }
 
 // HTTPサーバーに必要な環境変数を起動前に検証し、利用可能な設定だけを返す。
@@ -41,11 +43,33 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	cookieSecure, err := loadCookieSecure()
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Port:           port,
 		DatabaseURL:    databaseURL,
 		AllowedOrigins: allowedOrigins,
+		CookieSecure:   cookieSecure,
+		IsRender:       os.Getenv("RENDER") == "true",
 	}, nil
+}
+
+// Cookieは未設定時もHTTPS向けの安全な設定を既定値とする。
+func loadCookieSecure() (bool, error) {
+	value := strings.TrimSpace(os.Getenv("COOKIE_SECURE"))
+	if value == "" {
+		return true, nil
+	}
+
+	cookieSecure, err := strconv.ParseBool(value)
+	if err != nil || (value != "true" && value != "false") {
+		return false, fmt.Errorf("環境変数 COOKIE_SECURE にはtrueまたはfalseを設定してください")
+	}
+
+	return cookieSecure, nil
 }
 
 // HTTPサーバー以外のDB利用コマンドでも接続設定だけを読み込めるようにする。
