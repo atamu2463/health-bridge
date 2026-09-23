@@ -96,7 +96,7 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 			}
 			user := model.User{
 				Name:         "メール正規化テスト管理者",
-				Email:        "  Existing-User@Example.Invalid  ",
+				Email:        "\t\n Existing-User@Example.Invalid \r\n\t",
 				PasswordHash: "test-password-hash",
 				RoleID:       role.ID,
 			}
@@ -127,7 +127,7 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 		})
 	})
 
-	t.Run("正規化結果が衝突する場合はuserを変更せず失敗する", func(t *testing.T) {
+	t.Run("正規化結果が衝突する場合は全userを変更せず失敗する", func(t *testing.T) {
 		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
 			var role model.Role
 			if err := tx.Where("name = ?", model.RoleNameManager).First(&role).Error; err != nil {
@@ -136,13 +136,19 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 			users := []model.User{
 				{
 					Name:         "衝突テスト管理者1",
-					Email:        "Collision@Example.Invalid",
+					Email:        "\tCollision@Example.Invalid\t",
 					PasswordHash: "test-password-hash",
 					RoleID:       role.ID,
 				},
 				{
 					Name:         "衝突テスト管理者2",
 					Email:        "collision@example.invalid",
+					PasswordHash: "test-password-hash",
+					RoleID:       role.ID,
+				},
+				{
+					Name:         "衝突時に変更しない管理者",
+					Email:        "\t Unchanged@Example.Invalid \n",
 					PasswordHash: "test-password-hash",
 					RoleID:       role.ID,
 				},
@@ -155,21 +161,33 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 			if err == nil {
 				return errors.New("正規化結果が衝突するmigration.Run()が成功しました")
 			}
-			for _, email := range []string{users[0].Email, users[1].Email} {
-				if strings.Contains(err.Error(), email) {
-					return errors.New("衝突エラーに対象メールアドレスが含まれています")
+			sensitiveValues := []string{
+				users[0].Name,
+				users[0].Email,
+				users[1].Name,
+				users[1].Email,
+				users[2].Name,
+				users[2].Email,
+				"unchanged@example.invalid",
+			}
+			for _, value := range sensitiveValues {
+				if strings.Contains(err.Error(), value) {
+					return errors.New("衝突エラーにメールアドレスまたはユーザー情報が含まれています")
 				}
 			}
 
 			var storedUsers []model.User
-			if err := tx.Where("id IN ?", []uint{users[0].ID, users[1].ID}).Order("id").Find(&storedUsers).Error; err != nil {
+			userIDs := []uint{users[0].ID, users[1].ID, users[2].ID}
+			if err := tx.Where("id IN ?", userIDs).Order("id").Find(&storedUsers).Error; err != nil {
 				return err
 			}
-			if len(storedUsers) != 2 {
-				return fmt.Errorf("衝突後のuser数 = %d, want 2", len(storedUsers))
+			if len(storedUsers) != len(users) {
+				return fmt.Errorf("衝突後のuser数 = %d, want %d", len(storedUsers), len(users))
 			}
-			if storedUsers[0].Email != users[0].Email || storedUsers[1].Email != users[1].Email {
-				return fmt.Errorf("衝突後にuserのメールアドレスが変更されました: %#v", storedUsers)
+			for index := range users {
+				if storedUsers[index].ID != users[index].ID || storedUsers[index].Email != users[index].Email {
+					return errors.New("衝突後にuserが変更されました")
+				}
 			}
 
 			return nil
