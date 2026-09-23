@@ -1,6 +1,7 @@
 package migration_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"backend/config"
 	"backend/migration"
 	"backend/model"
+	"backend/repository"
 
 	"gorm.io/gorm"
 )
@@ -80,6 +82,94 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 			if conditions[0].Code != model.ConditionCodeExcellent ||
 				conditions[4].Code != model.ConditionCodeBad {
 				return fmt.Errorf("conditionsの表示順が正しくありません: %#v", conditions)
+			}
+
+			return nil
+		})
+	})
+
+	t.Run("既存userのメールアドレスを正規化して複数回実行できる", func(t *testing.T) {
+		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
+			var role model.Role
+			if err := tx.Where("name = ?", model.RoleNameManager).First(&role).Error; err != nil {
+				return err
+			}
+			user := model.User{
+				Name:         "メール正規化テスト管理者",
+				Email:        "  Existing-User@Example.Invalid  ",
+				PasswordHash: "test-password-hash",
+				RoleID:       role.ID,
+			}
+			if err := tx.Create(&user).Error; err != nil {
+				return err
+			}
+
+			if err := migration.Run(tx); err != nil {
+				return fmt.Errorf("メール正規化時のmigration.Run()に失敗しました: %w", err)
+			}
+			if err := migration.Run(tx); err != nil {
+				return fmt.Errorf("メール正規化後のmigration.Run()再実行に失敗しました: %w", err)
+			}
+
+			authRepository := repository.NewAuthRepository(tx)
+			foundUser, err := authRepository.FindUserByEmail(
+				context.Background(),
+				"existing-user@example.invalid",
+			)
+			if err != nil {
+				return fmt.Errorf("正規化後のメールアドレスでuserを取得できませんでした: %w", err)
+			}
+			if foundUser.ID != user.ID || foundUser.Email != "existing-user@example.invalid" {
+				return fmt.Errorf("正規化後のuser = %#v", foundUser)
+			}
+
+			return nil
+		})
+	})
+
+	t.Run("正規化結果が衝突する場合はuserを変更せず失敗する", func(t *testing.T) {
+		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
+			var role model.Role
+			if err := tx.Where("name = ?", model.RoleNameManager).First(&role).Error; err != nil {
+				return err
+			}
+			users := []model.User{
+				{
+					Name:         "衝突テスト管理者1",
+					Email:        "Collision@Example.Invalid",
+					PasswordHash: "test-password-hash",
+					RoleID:       role.ID,
+				},
+				{
+					Name:         "衝突テスト管理者2",
+					Email:        "collision@example.invalid",
+					PasswordHash: "test-password-hash",
+					RoleID:       role.ID,
+				},
+			}
+			if err := tx.Create(&users).Error; err != nil {
+				return err
+			}
+
+			err := migration.Run(tx)
+			if err == nil {
+				return errors.New("正規化結果が衝突するmigration.Run()が成功しました")
+			}
+			for _, email := range []string{users[0].Email, users[1].Email} {
+				if strings.Contains(err.Error(), email) {
+					return errors.New("衝突エラーに対象メールアドレスが含まれています")
+				}
+			}
+
+			var storedUsers []model.User
+			if err := tx.Where("id IN ?", []uint{users[0].ID, users[1].ID}).Order("id").Find(&storedUsers).Error; err != nil {
+				return err
+			}
+			if len(storedUsers) != 2 {
+				return fmt.Errorf("衝突後のuser数 = %d, want 2", len(storedUsers))
+			}
+			if storedUsers[0].Email != users[0].Email || storedUsers[1].Email != users[1].Email {
+				return fmt.Errorf("衝突後にuserのメールアドレスが変更されました: %#v", storedUsers)
 			}
 
 			return nil
