@@ -13,6 +13,7 @@ func Run(db *gorm.DB) error {
 		if err := tx.AutoMigrate(
 			&model.Role{},
 			&model.User{},
+			&model.Session{},
 			&model.Condition{},
 			&model.HealthRecord{},
 		); err != nil {
