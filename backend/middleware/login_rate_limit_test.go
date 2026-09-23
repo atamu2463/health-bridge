@@ -120,6 +120,141 @@ func TestLoginRateLimiterBoundsStoredKeys(t *testing.T) {
 	}
 }
 
+func TestLoginRateLimiterDoesNotEvictBlockedEmailAtCapacity(t *testing.T) {
+	currentTime := time.Date(2026, time.September, 24, 12, 0, 0, 0, time.UTC)
+	limiter := newLoginRateLimiter(loginRateLimitConfig{
+		ipLimit:    100,
+		emailLimit: 2,
+		window:     time.Minute,
+		maxKeys:    3,
+		now:        func() time.Time { return currentTime },
+	})
+	blockedEmail := "blocked@example.invalid"
+
+	if !limiter.allow("192.0.2.1", blockedEmail) || !limiter.allow("192.0.2.1", blockedEmail) {
+		t.Fatal("requests up to the email limit should be allowed")
+	}
+	if !limiter.allow("192.0.2.2", "second@example.invalid") ||
+		!limiter.allow("192.0.2.3", "third@example.invalid") {
+		t.Fatal("new keys should use capacity by evicting eligible entries")
+	}
+	if limiter.allow("192.0.2.4", blockedEmail) {
+		t.Fatal("blocked email was reset by capacity eviction")
+	}
+	assertRateLimitEntryCount(t, limiter, rateLimitIdentifierEmail, blockedEmail, 2)
+}
+
+func TestLoginRateLimiterDoesNotEvictBlockedIPAtCapacity(t *testing.T) {
+	currentTime := time.Date(2026, time.September, 24, 12, 0, 0, 0, time.UTC)
+	limiter := newLoginRateLimiter(loginRateLimitConfig{
+		ipLimit:    2,
+		emailLimit: 100,
+		window:     time.Minute,
+		maxKeys:    3,
+		now:        func() time.Time { return currentTime },
+	})
+	blockedIP := "192.0.2.1"
+
+	if !limiter.allow(blockedIP, "first@example.invalid") ||
+		!limiter.allow(blockedIP, "second@example.invalid") {
+		t.Fatal("requests up to the IP limit should be allowed")
+	}
+	if !limiter.allow("192.0.2.2", "third@example.invalid") {
+		t.Fatal("new keys should use capacity by evicting eligible entries")
+	}
+	if limiter.allow(blockedIP, "fourth@example.invalid") {
+		t.Fatal("blocked IP was reset by capacity eviction")
+	}
+	assertRateLimitEntryCount(t, limiter, rateLimitIdentifierIP, blockedIP, 2)
+}
+
+func TestLoginRateLimiterDoesNotPartiallyUpdateWhenCapacityCannotBeSecured(t *testing.T) {
+	currentTime := time.Date(2026, time.September, 24, 12, 0, 0, 0, time.UTC)
+	limiter := newLoginRateLimiter(loginRateLimitConfig{
+		ipLimit:    3,
+		emailLimit: 1,
+		window:     time.Minute,
+		maxKeys:    2,
+		now:        func() time.Time { return currentTime },
+	})
+	clientIP := "192.0.2.1"
+
+	if !limiter.allow(clientIP, "blocked@example.invalid") {
+		t.Fatal("initial request should be allowed")
+	}
+	if limiter.allow(clientIP, "new@example.invalid") {
+		t.Fatal("request should be rejected when capacity cannot be secured")
+	}
+	assertRateLimitEntryCount(t, limiter, rateLimitIdentifierIP, clientIP, 1)
+	if _, exists := limiter.entries[rateLimitDigest(rateLimitIdentifierEmail, "new@example.invalid")]; exists {
+		t.Fatal("new email counter was partially inserted")
+	}
+}
+
+func TestLoginRateLimiterReusesCapacityFromExpiredEntries(t *testing.T) {
+	currentTime := time.Date(2026, time.September, 24, 12, 0, 0, 0, time.UTC)
+	limiter := newLoginRateLimiter(loginRateLimitConfig{
+		ipLimit:    10,
+		emailLimit: 10,
+		window:     time.Minute,
+		maxKeys:    2,
+		now:        func() time.Time { return currentTime },
+	})
+	oldIP := "192.0.2.1"
+	oldEmail := "old@example.invalid"
+
+	if !limiter.allow(oldIP, oldEmail) {
+		t.Fatal("initial request should be allowed")
+	}
+	currentTime = currentTime.Add(time.Minute)
+	// 定期cleanupがまだ走らない状態でも、容量確保時には期限切れを優先して削除する。
+	limiter.nextCleanup = currentTime.Add(time.Minute)
+	if !limiter.allow("192.0.2.2", "new@example.invalid") {
+		t.Fatal("expired entries should make capacity reusable")
+	}
+	if _, exists := limiter.entries[rateLimitDigest(rateLimitIdentifierIP, oldIP)]; exists {
+		t.Fatal("expired IP entry was not removed")
+	}
+	if _, exists := limiter.entries[rateLimitDigest(rateLimitIdentifierEmail, oldEmail)]; exists {
+		t.Fatal("expired email entry was not removed")
+	}
+}
+
+func TestLoginRateLimiterEvictsOldestEligibleEntries(t *testing.T) {
+	currentTime := time.Date(2026, time.September, 24, 12, 0, 0, 0, time.UTC)
+	limiter := newLoginRateLimiter(loginRateLimitConfig{
+		ipLimit:    100,
+		emailLimit: 100,
+		window:     time.Minute,
+		maxKeys:    3,
+		now:        func() time.Time { return currentTime },
+	})
+	oldIP := "192.0.2.1"
+	oldEmail := "old@example.invalid"
+
+	if !limiter.allow(oldIP, oldEmail) {
+		t.Fatal("initial request should be allowed")
+	}
+	currentTime = currentTime.Add(time.Second)
+	newerIP := "192.0.2.2"
+	if !limiter.allow(newerIP, "") {
+		t.Fatal("newer IP should be stored")
+	}
+	currentTime = currentTime.Add(time.Second)
+	if !limiter.allow("192.0.2.3", "new@example.invalid") {
+		t.Fatal("request should evict eligible entries")
+	}
+	if _, exists := limiter.entries[rateLimitDigest(rateLimitIdentifierIP, newerIP)]; !exists {
+		t.Fatal("newer eligible entry was evicted before older entries")
+	}
+	if _, exists := limiter.entries[rateLimitDigest(rateLimitIdentifierIP, oldIP)]; exists {
+		t.Fatal("oldest IP entry was not evicted")
+	}
+	if _, exists := limiter.entries[rateLimitDigest(rateLimitIdentifierEmail, oldEmail)]; exists {
+		t.Fatal("oldest email entry was not evicted")
+	}
+}
+
 func TestNormalizedLoginEmailLimitsBodyReadAndRestoresBody(t *testing.T) {
 	body := strings.Repeat("x", maxRateLimitRequestBody+1024)
 	trackedBody := &countingReadCloser{reader: strings.NewReader(body)}
@@ -167,6 +302,17 @@ func TestLoginRateLimiterIsSafeForConcurrentAccess(t *testing.T) {
 
 	if len(limiter.entries) != 2 {
 		t.Fatalf("stored keys = %d, want 2", len(limiter.entries))
+	}
+}
+
+func assertRateLimitEntryCount(t *testing.T, limiter *loginRateLimiter, identifierType, value string, want int) {
+	t.Helper()
+	entry, exists := limiter.entries[rateLimitDigest(identifierType, value)]
+	if !exists {
+		t.Fatalf("%s entry does not exist", identifierType)
+	}
+	if entry.count != want {
+		t.Fatalf("%s count = %d, want %d", identifierType, entry.count, want)
 	}
 }
 
