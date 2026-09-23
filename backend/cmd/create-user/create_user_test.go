@@ -40,6 +40,22 @@ func TestValidateCreateUserInput(t *testing.T) {
 	}
 }
 
+func TestValidateCreateUserInputNormalizesEmails(t *testing.T) {
+	input, err := validateCreateUserInput(createUserInput{
+		Name:         "利用者",
+		Email:        " User@Example.Invalid ",
+		Role:         model.RoleNameEmployee,
+		ManagerEmail: " Manager@Example.Invalid ",
+		Password:     "password",
+	})
+	if err != nil {
+		t.Fatalf("validateCreateUserInput() error = %v", err)
+	}
+	if input.Email != "user@example.invalid" || input.ManagerEmail != "manager@example.invalid" {
+		t.Fatalf("email normalization failed: email=%q managerEmail=%q", input.Email, input.ManagerEmail)
+	}
+}
+
 func TestReadAndConfirmPasswordDoesNotEchoInput(t *testing.T) {
 	password := fmt.Sprintf("Hidden-%d!", time.Now().UnixNano())
 	input, err := os.CreateTemp(t.TempDir(), "password-input")
@@ -107,7 +123,7 @@ func TestCreateUserOnPostgreSQL(t *testing.T) {
 
 		manager, err := createUser(tx, createUserInput{
 			Name:     "テスト管理者",
-			Email:    managerEmail,
+			Email:    " Manager-" + suffix + "@Example.Invalid ",
 			Role:     model.RoleNameManager,
 			Password: managerPassword,
 		}, bcrypt.MinCost)
@@ -127,12 +143,15 @@ func TestCreateUserOnPostgreSQL(t *testing.T) {
 		if storedManager.Role.Name != model.RoleNameManager {
 			return errors.New("managerへmanager roleが保存されませんでした")
 		}
+		if storedManager.Email != managerEmail {
+			return fmt.Errorf("manager email = %q, want %q", storedManager.Email, managerEmail)
+		}
 
 		employee, err := createUser(tx, createUserInput{
 			Name:         "テスト従業員",
-			Email:        employeeEmail,
+			Email:        " Employee-" + suffix + "@Example.Invalid ",
 			Role:         model.RoleNameEmployee,
-			ManagerEmail: managerEmail,
+			ManagerEmail: " Manager-" + suffix + "@Example.Invalid ",
 			Password:     employeePassword,
 		}, bcrypt.MinCost)
 		if err != nil {
@@ -150,6 +169,9 @@ func TestCreateUserOnPostgreSQL(t *testing.T) {
 		}
 		if storedEmployee.Role.Name != model.RoleNameEmployee {
 			return errors.New("employeeへemployee roleが保存されませんでした")
+		}
+		if storedEmployee.Email != employeeEmail {
+			return fmt.Errorf("employee email = %q, want %q", storedEmployee.Email, employeeEmail)
 		}
 
 		_, duplicateErr := createUser(tx, createUserInput{

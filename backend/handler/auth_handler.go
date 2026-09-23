@@ -49,12 +49,18 @@ func NewAuthHandler(authService AuthService, cookieSecure bool) *AuthHandler {
 
 func (h *AuthHandler) Login(c *gin.Context) {
 	var request loginRequest
-	if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.Email) == "" || request.Password == "" {
+	if err := c.ShouldBindJSON(&request); err != nil {
 		api.InvalidRequest(c)
 		return
 	}
 
-	result, err := h.authService.Login(c.Request.Context(), strings.TrimSpace(request.Email), request.Password)
+	email := strings.ToLower(strings.TrimSpace(request.Email))
+	if email == "" || request.Password == "" {
+		api.InvalidRequest(c)
+		return
+	}
+
+	result, err := h.authService.Login(c.Request.Context(), email, request.Password)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
 			api.InvalidCredentials(c)

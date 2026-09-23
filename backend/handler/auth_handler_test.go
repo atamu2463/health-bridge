@@ -48,7 +48,7 @@ func TestLoginReturnsUserAndSecureCookie(t *testing.T) {
 		},
 		Token: "session-token-secret", ExpiresAt: handlerTestExpiresAt,
 	}}
-	recorder := performHandlerRequest(http.MethodPost, "/api/auth/login", `{"email":" employee@example.invalid ","password":"password"}`, NewAuthHandler(fake, true).Login, nil)
+	recorder := performHandlerRequest(http.MethodPost, "/api/auth/login", `{"email":" Employee@Example.Invalid ","password":"password"}`, NewAuthHandler(fake, true).Login, nil)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
