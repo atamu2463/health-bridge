@@ -1,9 +1,12 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
 import { ArrowLeft, Heart, LogOut, Shield } from "lucide-react"
 
 import { AccountMenu } from "@/components/account-menu"
+import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
 
 type AppHeaderProps = {
@@ -13,25 +16,38 @@ type AppHeaderProps = {
   backLabel?: string
 }
 
-const accountByRole = {
-  employee: {
-    name: "山田 太郎",
-    email: "yamada@company.com",
-  },
-  manager: {
-    name: "鈴木 花子",
-    email: "manager@company.com",
-  },
-}
-
 export function AppHeader({
   role,
   authenticated = false,
   backHref,
   backLabel = "戻る",
 }: AppHeaderProps) {
+  const router = useRouter()
+  const { user, logout } = useAuth()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [logoutError, setLogoutError] = useState<string | null>(null)
   const Icon = role === "manager" ? Shield : Heart
-  const account = role ? accountByRole[role] : null
+  const account = authenticated ? user : null
+
+  async function handleLogout() {
+    if (isLoggingOut) {
+      return
+    }
+
+    setIsLoggingOut(true)
+    setLogoutError(null)
+
+    try {
+      await logout()
+      router.replace("/")
+    } catch {
+      setLogoutError(
+        "ログアウトできませんでした。しばらくしてからもう一度お試しください。",
+      )
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
 
   return (
     <header className="flex min-h-14 items-center justify-between border-b border-border bg-background px-4 py-3 sm:min-h-16 sm:px-6 sm:py-4">
@@ -69,17 +85,30 @@ export function AppHeader({
               </span>
             )}
 
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className="gap-1 text-muted-foreground"
-            >
-              <Link href="/" aria-label="ログアウト">
+            <div className="flex flex-col items-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1 text-muted-foreground"
+                aria-label="ログアウト"
+                disabled={isLoggingOut}
+                onClick={() => void handleLogout()}
+              >
                 <LogOut className="h-4 w-4" aria-hidden="true" />
-                <span className="hidden sm:inline">ログアウト</span>
-              </Link>
-            </Button>
+                <span className="hidden sm:inline">
+                  {isLoggingOut ? "ログアウト中..." : "ログアウト"}
+                </span>
+              </Button>
+              {logoutError ? (
+                <span
+                  className="max-w-56 text-right text-xs text-destructive"
+                  role="alert"
+                >
+                  {logoutError}
+                </span>
+              ) : null}
+            </div>
           </>
         ) : backHref ? (
           <Button

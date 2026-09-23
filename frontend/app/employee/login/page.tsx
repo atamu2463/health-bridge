@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { Heart } from "lucide-react"
+import { useAuth } from "@/components/auth-provider"
 import { AppHeader } from "@/components/app-header"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,16 +15,44 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { AuthApiError } from "@/lib/auth-api"
 
 export default function EmployeeLoginPage() {
   const router = useRouter()
+  const { login } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    // TODO: Implement actual authentication
-    router.push("/employee/menu")
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    if (isSubmitting) {
+      return
+    }
+
+    setIsSubmitting(true)
+    setErrorMessage(null)
+
+    try {
+      const user = await login(email, password)
+      router.replace(
+        user.role === "manager" ? "/manager/menu" : "/employee/menu",
+      )
+    } catch (error) {
+      if (
+        error instanceof AuthApiError &&
+        error.code === "invalid_credentials"
+      ) {
+        setErrorMessage("メールアドレスまたはパスワードが正しくありません。")
+      } else {
+        setErrorMessage(
+          "ログインできませんでした。しばらくしてからもう一度お試しください。",
+        )
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -53,6 +82,7 @@ export default function EmployeeLoginPage() {
                   placeholder="example@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled={isSubmitting}
                   required
                 />
               </div>
@@ -64,11 +94,22 @@ export default function EmployeeLoginPage() {
                   placeholder="パスワードを入力"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={isSubmitting}
                   required
                 />
               </div>
-              <Button type="submit" className="w-full mt-2" size="lg">
-                ログイン
+              {errorMessage ? (
+                <p className="text-sm text-destructive" role="alert">
+                  {errorMessage}
+                </p>
+              ) : null}
+              <Button
+                type="submit"
+                className="w-full mt-2"
+                size="lg"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "ログイン中..." : "ログイン"}
               </Button>
             </form>
           </CardContent>
