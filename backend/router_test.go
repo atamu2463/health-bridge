@@ -1,20 +1,45 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"backend/handler"
+	"backend/service"
 
 	"github.com/gin-gonic/gin"
 )
 
 const testAllowedOrigin = "http://localhost:3000"
 
+type routerAuthService struct{}
+
+func (routerAuthService) Login(context.Context, string, string) (service.LoginResult, error) {
+	return service.LoginResult{}, service.ErrInvalidCredentials
+}
+
+func (routerAuthService) Logout(context.Context, string) error {
+	return nil
+}
+
+func (routerAuthService) Authenticate(context.Context, string) (service.AuthenticatedUser, error) {
+	return service.AuthenticatedUser{}, service.ErrUnauthenticated
+}
+
+func newTestRouter() *gin.Engine {
+	authService := routerAuthService{}
+	return newRouter([]string{testAllowedOrigin}, authService, handler.NewAuthHandler(authService, false))
+}
+
 func TestHealthEndpoint(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/health", nil)
 	response := httptest.NewRecorder()
 
-	newRouter([]string{testAllowedOrigin}).ServeHTTP(response, request)
+	newTestRouter().ServeHTTP(response, request)
 
 	result := response.Result()
 	defer result.Body.Close()
@@ -40,19 +65,19 @@ func TestUnknownRoute(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/unknown", nil)
 	response := httptest.NewRecorder()
 
-	newRouter([]string{testAllowedOrigin}).ServeHTTP(response, request)
+	newTestRouter().ServeHTTP(response, request)
 
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status code = %d, want %d", response.Code, http.StatusNotFound)
 	}
 
-	if body := response.Body.String(); body != `{"error":"not_found"}` {
-		t.Fatalf("response body = %q, want %q", body, `{"error":"not_found"}`)
+	if body := response.Body.String(); !strings.Contains(body, `"error":{"code":"not_found","message":"`) {
+		t.Fatalf("response body does not use the common error format: %q", body)
 	}
 }
 
 func TestRecoveryDoesNotExposeInternalError(t *testing.T) {
-	router := newRouter([]string{testAllowedOrigin})
+	router := newTestRouter()
 	router.GET("/panic", func(_ *gin.Context) {
 		panic("内部エラーの詳細")
 	})
@@ -65,12 +90,8 @@ func TestRecoveryDoesNotExposeInternalError(t *testing.T) {
 		t.Fatalf("status code = %d, want %d", response.Code, http.StatusInternalServerError)
 	}
 
-	if body := response.Body.String(); body != `{"error":"internal_server_error"}` {
-		t.Fatalf(
-			"response body = %q, want %q",
-			body,
-			`{"error":"internal_server_error"}`,
-		)
+	if body := response.Body.String(); !strings.Contains(body, `"error":{"code":"internal_server_error","message":"`) {
+		t.Fatalf("response body does not use the common error format: %q", body)
 	}
 }
 
@@ -101,7 +122,7 @@ func TestCORSPreflight(t *testing.T) {
 			request.Header.Set("Access-Control-Request-Method", http.MethodGet)
 			response := httptest.NewRecorder()
 
-			newRouter([]string{testAllowedOrigin}).ServeHTTP(response, request)
+			newTestRouter().ServeHTTP(response, request)
 
 			if response.Code != tt.wantStatus {
 				t.Fatalf("status code = %d, want %d", response.Code, tt.wantStatus)
@@ -113,8 +134,17 @@ func TestCORSPreflight(t *testing.T) {
 					tt.wantAllowOrigin,
 				)
 			}
-			if allowCredentials := response.Header().Get("Access-Control-Allow-Credentials"); allowCredentials != "" {
-				t.Fatalf("Access-Control-Allow-Credentials = %q, want empty", allowCredentials)
+			wantCredentials := ""
+			if tt.wantAllowOrigin != "" {
+				wantCredentials = "true"
+			}
+			if allowCredentials := response.Header().Get("Access-Control-Allow-Credentials"); allowCredentials != wantCredentials {
+				t.Fatalf("Access-Control-Allow-Credentials = %q, want %q", allowCredentials, wantCredentials)
+			}
+			if tt.wantAllowOrigin != "" {
+				if methods := response.Header().Get("Access-Control-Allow-Methods"); methods != "GET, POST, PUT, PATCH, DELETE, OPTIONS" {
+					t.Fatalf("Access-Control-Allow-Methods = %q", methods)
+				}
 			}
 			if vary := response.Header().Get("Vary"); vary != "Origin" {
 				t.Fatalf("Vary = %q, want %q", vary, "Origin")
@@ -151,7 +181,7 @@ func TestCORSVaryOrigin(t *testing.T) {
 			}
 			response := httptest.NewRecorder()
 
-			newRouter([]string{testAllowedOrigin}).ServeHTTP(response, request)
+			newTestRouter().ServeHTTP(response, request)
 
 			if response.Code != http.StatusOK {
 				t.Fatalf("status code = %d, want %d", response.Code, http.StatusOK)
@@ -166,6 +196,111 @@ func TestCORSVaryOrigin(t *testing.T) {
 					tt.wantAllowOrigin,
 				)
 			}
+			wantCredentials := ""
+			if tt.wantAllowOrigin != "" {
+				wantCredentials = "true"
+			}
+			if credentials := response.Header().Get("Access-Control-Allow-Credentials"); credentials != wantCredentials {
+				t.Fatalf("Access-Control-Allow-Credentials = %q, want %q", credentials, wantCredentials)
+			}
 		})
+	}
+}
+
+func TestStateChangingRequestsRequireAllowedOrigin(t *testing.T) {
+	tests := []struct {
+		name       string
+		origin     string
+		wantStatus int
+	}{
+		{name: "allowed", origin: testAllowedOrigin, wantStatus: http.StatusBadRequest},
+		{name: "missing", wantStatus: http.StatusForbidden},
+		{name: "not allowed", origin: "https://example.com", wantStatus: http.StatusForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{}`))
+			request.Header.Set("Content-Type", "application/json")
+			if tt.origin != "" {
+				request.Header.Set("Origin", tt.origin)
+			}
+			response := httptest.NewRecorder()
+			newTestRouter().ServeHTTP(response, request)
+
+			if response.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d: %s", response.Code, tt.wantStatus, response.Body.String())
+			}
+			if tt.wantStatus == http.StatusForbidden && !strings.Contains(response.Body.String(), `"code":"origin_not_allowed"`) {
+				t.Fatalf("unexpected error body: %s", response.Body.String())
+			}
+			if tt.origin != testAllowedOrigin && response.Header().Get("Access-Control-Allow-Credentials") != "" {
+				t.Fatal("credentials header was returned for a missing or disallowed Origin")
+			}
+		})
+	}
+}
+
+func TestAuthEndpointsDisableResponseCaching(t *testing.T) {
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		wantStatus int
+	}{
+		{name: "login", method: http.MethodPost, path: "/api/auth/login", body: `{}`, wantStatus: http.StatusBadRequest},
+		{name: "me", method: http.MethodGet, path: "/api/auth/me", wantStatus: http.StatusUnauthorized},
+		{name: "logout", method: http.MethodPost, path: "/api/auth/logout", wantStatus: http.StatusNoContent},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
+			if tt.body != "" {
+				request.Header.Set("Content-Type", "application/json")
+			}
+			if tt.method != http.MethodGet {
+				request.Header.Set("Origin", testAllowedOrigin)
+			}
+			response := httptest.NewRecorder()
+			newTestRouter().ServeHTTP(response, request)
+
+			if response.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d: %s", response.Code, tt.wantStatus, response.Body.String())
+			}
+			if cacheControl := response.Header().Get("Cache-Control"); cacheControl != "no-store" {
+				t.Fatalf("Cache-Control = %q, want %q", cacheControl, "no-store")
+			}
+		})
+	}
+}
+
+func TestAccessLogAndErrorsDoNotContainAuthenticationSecrets(t *testing.T) {
+	previousWriter := gin.DefaultWriter
+	var logOutput bytes.Buffer
+	gin.DefaultWriter = &logOutput
+	t.Cleanup(func() { gin.DefaultWriter = previousWriter })
+
+	email := "private@example.invalid"
+	password := "password-secret"
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/login",
+		strings.NewReader(`{"email":"`+email+`","password":"`+password+`"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", testAllowedOrigin)
+	request.Header.Set("Cookie", "health_bridge_session=cookie-secret")
+	response := httptest.NewRecorder()
+	newTestRouter().ServeHTTP(response, request)
+
+	for _, secret := range []string{email, password, "cookie-secret"} {
+		if strings.Contains(logOutput.String(), secret) {
+			t.Fatalf("access log contains secret %q", secret)
+		}
+		if strings.Contains(response.Body.String(), secret) {
+			t.Fatalf("error response contains secret %q", secret)
+		}
 	}
 }

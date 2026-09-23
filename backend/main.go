@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"backend/config"
+	"backend/handler"
+	"backend/repository"
+	"backend/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -56,11 +59,14 @@ func runServer(ctx context.Context) (runErr error) {
 	}()
 
 	gin.SetMode(gin.ReleaseMode)
+	authRepository := repository.NewAuthRepository(db)
+	authService := service.NewAuthService(authRepository)
+	authHandler := handler.NewAuthHandler(authService, cfg.CookieSecure)
 
 	// ヘッダー送信が完了しない接続によるサーバー資源の占有を防止する。
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           newRouter(cfg.AllowedOrigins),
+		Handler:           newRouter(cfg.AllowedOrigins, authService, authHandler),
 		ReadTimeout:       readTimeout,
 		ReadHeaderTimeout: readHeaderTimeout,
 		WriteTimeout:      writeTimeout,

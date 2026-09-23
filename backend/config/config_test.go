@@ -10,6 +10,7 @@ func TestLoad(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://user:password@db:5432/health_bridge")
 	t.Setenv("ALLOWED_ORIGINS", "http://localhost:3000, https://example.com, http://localhost:3000")
 	t.Setenv("PORT", "9090")
+	t.Setenv("COOKIE_SECURE", "false")
 
 	cfg, err := Load()
 	if err != nil {
@@ -21,6 +22,9 @@ func TestLoad(t *testing.T) {
 	}
 	if cfg.DatabaseURL != "postgresql://user:password@db:5432/health_bridge" {
 		t.Fatal("DatabaseURL が環境変数の値と一致しません")
+	}
+	if cfg.CookieSecure {
+		t.Fatal("CookieSecure = true, want false")
 	}
 
 	wantOrigins := []string{"http://localhost:3000", "https://example.com"}
@@ -41,6 +45,20 @@ func TestLoadUsesDefaultPort(t *testing.T) {
 
 	if cfg.Port != defaultPort {
 		t.Fatalf("Port = %q, want %q", cfg.Port, defaultPort)
+	}
+}
+
+func TestLoadUsesSecureCookieByDefault(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://user:password@db:5432/health_bridge")
+	t.Setenv("ALLOWED_ORIGINS", "http://localhost:3000")
+	t.Setenv("COOKIE_SECURE", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.CookieSecure {
+		t.Fatal("CookieSecure = false, want true")
 	}
 }
 
@@ -140,6 +158,13 @@ func TestLoadRejectsInvalidConfiguration(t *testing.T) {
 			port:           "8080",
 			wantError:      "ALLOWED_ORIGINS",
 		},
+		{
+			name:           "不正なCOOKIE_SECURE",
+			databaseURL:    "postgresql://user:password@db:5432/health_bridge",
+			allowedOrigins: "http://localhost:3000",
+			port:           "8080",
+			wantError:      "COOKIE_SECURE",
+		},
 	}
 
 	for _, tt := range tests {
@@ -147,6 +172,11 @@ func TestLoadRejectsInvalidConfiguration(t *testing.T) {
 			t.Setenv("DATABASE_URL", tt.databaseURL)
 			t.Setenv("ALLOWED_ORIGINS", tt.allowedOrigins)
 			t.Setenv("PORT", tt.port)
+			if tt.name == "不正なCOOKIE_SECURE" {
+				t.Setenv("COOKIE_SECURE", "1")
+			} else {
+				t.Setenv("COOKIE_SECURE", "")
+			}
 
 			_, err := Load()
 			if err == nil {
