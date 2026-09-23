@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -32,7 +33,7 @@ func (routerAuthService) Authenticate(context.Context, string) (service.Authenti
 
 func newTestRouter() *gin.Engine {
 	authService := routerAuthService{}
-	return newRouter([]string{testAllowedOrigin}, authService, handler.NewAuthHandler(authService, false))
+	return newRouter([]string{testAllowedOrigin}, authService, handler.NewAuthHandler(authService, false), false)
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -276,6 +277,36 @@ func TestAuthEndpointsDisableResponseCaching(t *testing.T) {
 	}
 }
 
+func TestLoginRateLimitIsAppliedToRouter(t *testing.T) {
+	router := newTestRouter()
+	for attempt := 1; attempt <= 31; attempt++ {
+		request := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{}`))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Origin", testAllowedOrigin)
+		request.RemoteAddr = "192.0.2.10:1234"
+		// 転送ヘッダーを書き換えても、非Render環境では送信元IPの制限を回避できない。
+		request.Header.Set("X-Forwarded-For", "198.51.100."+strconv.Itoa(attempt))
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+
+		if attempt <= 30 {
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("attempt %d status = %d, want %d", attempt, response.Code, http.StatusBadRequest)
+			}
+			continue
+		}
+		if response.Code != http.StatusTooManyRequests {
+			t.Fatalf("attempt %d status = %d, want %d", attempt, response.Code, http.StatusTooManyRequests)
+		}
+		if !strings.Contains(response.Body.String(), `"code":"too_many_requests"`) {
+			t.Fatalf("unexpected error body: %s", response.Body.String())
+		}
+		if cacheControl := response.Header().Get("Cache-Control"); cacheControl != "no-store" {
+			t.Fatalf("Cache-Control = %q, want %q", cacheControl, "no-store")
+		}
+	}
+}
+
 func TestAccessLogAndErrorsDoNotContainAuthenticationSecrets(t *testing.T) {
 	previousWriter := gin.DefaultWriter
 	var logOutput bytes.Buffer
@@ -302,5 +333,42 @@ func TestAccessLogAndErrorsDoNotContainAuthenticationSecrets(t *testing.T) {
 		if strings.Contains(response.Body.String(), secret) {
 			t.Fatalf("error response contains secret %q", secret)
 		}
+	}
+}
+
+func TestClientIPProxyTrust(t *testing.T) {
+	tests := []struct {
+		name           string
+		isRender       bool
+		cfConnectingIP string
+		wantIP         string
+	}{
+		{name: "転送ヘッダーを既定では信頼しない", cfConnectingIP: "203.0.113.20", wantIP: "192.0.2.10"},
+		{name: "RenderではCF-Connecting-IPを使用する", isRender: true, cfConnectingIP: "203.0.113.20", wantIP: "203.0.113.20"},
+		{name: "Renderでヘッダーがない場合は接続元IPへ戻る", isRender: true, wantIP: "192.0.2.10"},
+		{name: "Renderでヘッダーが不正な場合は接続元IPへ戻る", isRender: true, cfConnectingIP: "invalid-ip", wantIP: "192.0.2.10"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := gin.New()
+			configureClientIP(router, tt.isRender)
+			router.GET("/client-ip", func(c *gin.Context) {
+				c.String(http.StatusOK, c.ClientIP())
+			})
+
+			request := httptest.NewRequest(http.MethodGet, "/client-ip", nil)
+			request.RemoteAddr = "192.0.2.10:1234"
+			request.Header.Set("X-Forwarded-For", "198.51.100.30")
+			if tt.cfConnectingIP != "" {
+				request.Header.Set("CF-Connecting-IP", tt.cfConnectingIP)
+			}
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+
+			if body := response.Body.String(); body != tt.wantIP {
+				t.Fatalf("ClientIP = %q, want %q", body, tt.wantIP)
+			}
+		})
 	}
 }

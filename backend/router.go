@@ -18,8 +18,9 @@ type authService interface {
 }
 
 // アクセスログ、panic復旧、CORS、Origin検証を全ルートへ一貫して適用する。
-func newRouter(allowedOrigins []string, authService authService, authHandler *handler.AuthHandler) *gin.Engine {
+func newRouter(allowedOrigins []string, authService authService, authHandler *handler.AuthHandler, isRender bool) *gin.Engine {
 	router := gin.New()
+	configureClientIP(router, isRender)
 	router.Use(
 		gin.LoggerWithConfig(gin.LoggerConfig{SkipQueryString: true}),
 		gin.CustomRecoveryWithWriter(io.Discard, func(c *gin.Context, _ any) {
@@ -33,7 +34,7 @@ func newRouter(allowedOrigins []string, authService authService, authHandler *ha
 	router.GET("/health", healthHandler)
 	auth := router.Group("/api/auth")
 	auth.Use(middleware.NoStore())
-	auth.POST("/login", authHandler.Login)
+	auth.POST("/login", middleware.LoginRateLimit(), authHandler.Login)
 	auth.GET("/me", middleware.RequireAuthentication(authService), authHandler.Me)
 	auth.POST("/logout", authHandler.Logout)
 	router.NoRoute(func(c *gin.Context) {
@@ -41,6 +42,20 @@ func newRouter(allowedOrigins []string, authService authService, authHandler *ha
 	})
 
 	return router
+}
+
+// Renderでは外部からコンテナへ直接到達できず、CF-Connecting-IPは入口で上書きされる。
+// それ以外の環境では転送ヘッダーを信頼せず、RemoteAddrをクライアントIPとして扱う。
+func configureClientIP(router *gin.Engine, isRender bool) {
+	trustedProxies := []string(nil)
+	router.RemoteIPHeaders = nil
+	if isRender {
+		trustedProxies = []string{"0.0.0.0/0", "::/0"}
+		router.RemoteIPHeaders = []string{"CF-Connecting-IP"}
+	}
+	if err := router.SetTrustedProxies(trustedProxies); err != nil {
+		panic("trusted proxy設定に失敗しました")
+	}
 }
 
 func healthHandler(c *gin.Context) {

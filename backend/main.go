@@ -66,7 +66,7 @@ func runServer(ctx context.Context) (runErr error) {
 	// ヘッダー送信が完了しない接続によるサーバー資源の占有を防止する。
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           newRouter(cfg.AllowedOrigins, authService, authHandler),
+		Handler:           newRouter(cfg.AllowedOrigins, authService, authHandler, cfg.IsRender),
 		ReadTimeout:       readTimeout,
 		ReadHeaderTimeout: readHeaderTimeout,
 		WriteTimeout:      writeTimeout,

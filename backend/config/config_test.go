@@ -62,6 +62,20 @@ func TestLoadUsesSecureCookieByDefault(t *testing.T) {
 	}
 }
 
+func TestLoadDetectsRenderEnvironment(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://user:password@db:5432/health_bridge")
+	t.Setenv("ALLOWED_ORIGINS", "http://localhost:3000")
+	t.Setenv("RENDER", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.IsRender {
+		t.Fatal("IsRender = false, want true")
+	}
+}
+
 func TestParseAllowedOriginsAcceptsCanonicalOrigins(t *testing.T) {
 	tests := []struct {
 		name  string

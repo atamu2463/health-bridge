@@ -12,6 +12,7 @@ const (
 	ErrorCodeUnauthenticated     = "unauthenticated"
 	ErrorCodeForbidden           = "forbidden"
 	ErrorCodeOriginNotAllowed    = "origin_not_allowed"
+	ErrorCodeTooManyRequests     = "too_many_requests"
 	ErrorCodeNotFound            = "not_found"
 	ErrorCodeInternalServerError = "internal_server_error"
 )
@@ -47,6 +48,10 @@ func Forbidden(c *gin.Context) {
 
 func OriginNotAllowed(c *gin.Context) {
 	AbortWithError(c, http.StatusForbidden, ErrorCodeOriginNotAllowed, "許可されていないOriginです")
+}
+
+func TooManyRequests(c *gin.Context) {
+	AbortWithError(c, http.StatusTooManyRequests, ErrorCodeTooManyRequests, "しばらく待ってから再度お試しください")
 }
 
 func NotFound(c *gin.Context) {

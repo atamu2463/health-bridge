@@ -15,6 +15,7 @@ type Config struct {
 	DatabaseURL    string
 	AllowedOrigins []string
 	CookieSecure   bool
+	IsRender       bool
 }
 
 // HTTPサーバーに必要な環境変数を起動前に検証し、利用可能な設定だけを返す。
@@ -52,6 +53,7 @@ func Load() (Config, error) {
 		DatabaseURL:    databaseURL,
 		AllowedOrigins: allowedOrigins,
 		CookieSecure:   cookieSecure,
+		IsRender:       os.Getenv("RENDER") == "true",
 	}, nil
 }
 

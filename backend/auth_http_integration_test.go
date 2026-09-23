@@ -76,7 +76,7 @@ func TestAuthenticationHTTPFlowOnPostgreSQL(t *testing.T) {
 
 		authRepository := repository.NewAuthRepository(tx)
 		authService := service.NewAuthService(authRepository)
-		router := newRouter([]string{testAllowedOrigin}, authService, handler.NewAuthHandler(authService, false))
+		router := newRouter([]string{testAllowedOrigin}, authService, handler.NewAuthHandler(authService, false), false)
 
 		loginRequest := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(
 			`{"email":"http-integration@example.invalid","password":"integration-password"}`,
