@@ -8,7 +8,7 @@
 - 資料参照日：2026年9月18日
 - 判断基準：第2回レビュー後の決定、Issue #110 / #112 / #133の反映内容、現在のコードをv2案より優先
 
-業務API設計は実装前のものです。DBモデル、マイグレーション、マスターデータは実装済みですが、現時点で実装済みのバックエンドAPIは `GET /health` だけであり、以下に並べる業務APIと認証・認可は未実装です。
+業務API設計は実装前のものです。DBモデル、マイグレーション、マスターデータ、管理用ユーザー作成CLIは実装済みですが、現時点で実装済みのバックエンドAPIは `GET /health` だけであり、以下に並べる業務APIと認証・認可は未実装です。
 
 ## 2. 現在と予定のシステム構成
 
@@ -52,11 +52,11 @@ Render Freeプランでは非稼働時間後にサービスがスリープし、
 | --- | --- | --- |
 | フロントエンド | 利用者別画面、入力、一覧、グラフ、モック操作 | モックUI実装済み。業務API未接続 |
 | モック状態管理 | 従業員・担当関係・体調記録の一時更新 | React Contextで実装。再読み込みで初期化 |
-| バックエンド | 認証・認可、業務ルール、DB操作 | Gin、PostgreSQL接続、共通middleware、graceful shutdown、DBモデル／マイグレーションまで実装し、Renderへ公開済み |
+| バックエンド | 認証・認可、業務ルール、DB操作 | ローカルでは5テーブルのモデル／マイグレーションと管理用ユーザー作成CLIまで実装。RenderはIssue #138の共通基盤まで公開済み |
 | Health Check | HTTPプロセスの稼働確認 | `GET /health` 実装済み。Renderの公開環境で正常応答を確認済み。DB疎通確認ではない |
 | 業務API | アカウント・体調記録・担当関係の処理 | 設計済み・未実装 |
-| 開発DB | ローカル開発データの保存 | Docker ComposeでPostgreSQLを構成。4テーブルとマスターデータを明示コマンドで作成可能 |
-| 本番DB | 公開環境のデータ保存 | Supabase PostgreSQLを構築し、マイグレーションとマスターデータ投入を実施済み |
+| 開発DB | ローカル開発データの保存 | Docker ComposeでPostgreSQLを構成。5テーブルとマスターデータを明示コマンドで作成可能 |
+| 本番DB | 公開環境のデータ保存 | Supabase PostgreSQLを構築し、Issue #138時点の4テーブルとマスターデータを投入済み。Issue #139の`sessions`は未反映 |
 | 認証・認可 | PostgreSQLセッションとロール・担当関係に基づく制御 | 設計済み・未実装。ログイン、401、403は画面のみ |
 
 ## 4. API
@@ -98,11 +98,11 @@ HTTPサーバーはOSの終了シグナルを受けると10秒を上限にgracef
 
 担当関係は、作成時（API-04）、担当範囲の参照・更新（API-05〜07、10、11）、担当変更（API-12、13）にまたがります。画面に対象IDが含まれていても信用せず、API側でログインユーザーのroleと `users.manager_id` を照合する必要があります。
 
-旧API-01のmanager一般登録はMVP対象外とし、API IDは別機能へ再利用しません。managerは未実装の管理用CLIで作成し、パスワードをbcryptでハッシュ化して保存します。既存のmanager登録画面はモックUIとして残しますが、実APIへは接続しません。組織用招待コードとメール認証は将来拡張です。
+旧API-01のmanager一般登録はMVP対象外とし、API IDは別機能へ再利用しません。managerは実装済みの管理用CLIで作成し、パスワードをbcryptでハッシュ化して保存します。既存のmanager登録画面はモックUIとして残しますが、実APIへは接続しません。組織用招待コードとメール認証は将来拡張です。
 
 API-14「チーム体調傾向」は現行MVPから除外済みのため、業務APIへ追加しません。機能IDと同様にAPI IDも別機能へ再利用しません。
 
-### 4.3 認証・認可とAPI共通仕様（設計済み・未実装）
+### 4.3 認証・認可とAPI共通仕様（DB・管理CLI実装済み、API未実装）
 
 #### 認証・セッション
 
@@ -116,7 +116,7 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 - 未認証、トークン不正、セッション無効または期限切れの場合は `401 Unauthorized` とする
 - 認証時にユーザーの有効状態を確認し、無効化済みユーザーは既存セッションが残っていても認証を許可せず `401 Unauthorized` とする
 
-セッション保存用テーブル、認証middleware、ログイン・ログアウト処理、bcrypt処理、manager作成CLIはいずれも未実装です。
+`sessions`テーブルとbcrypt処理を行う管理用ユーザー作成CLIは実装済みです。ログイン・ログアウト・現在ユーザー取得、セッションの発行と検証、Cookie、認証middlewareは未実装です。
 
 #### Cookie・CORS・CSRF
 
@@ -195,16 +195,15 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 次の事項は本対応では確定せず、関連実装前に別途判断します。これらを決める場合も、上記の確定方針は変更しません。
 
 - 期限切れセッションの削除方法
-- bcryptのcostとmanager作成CLIのコマンドインターフェース
 - ローカル環境の `SameSite` 設定とVercel Preview URLを許可Originへ登録する運用
 - 無効化済みユーザーは既存セッションでも認証を許可しない。セッション行を削除するタイミングは関連実装時に決定する
 - 無効化後の履歴参照、担当変更履歴、同時更新の扱い
 - 業務API実装後の本番デモデータ投入方法
 - manager自身の編集・削除UIと、到達不能な従業員検索・追加ダイアログのMVP上の扱い
 
-## 5. DB設計（既存4テーブルは実装済み）
+## 5. DB設計（5テーブル実装済み）
 
-DB設計v2を第2回レビュー後のMVPと照合し、次の4テーブルをGORMモデルとPostgreSQLスキーマとして実装しています。チーム集計用テーブル、担当変更履歴、セッション保存用テーブルは追加していません。セッションはPostgreSQLへ保存する設計ですが、テーブル定義とマイグレーションは認証実装時に追加します。
+DB設計v2を第2回レビュー後のMVPと照合し、次の5テーブルをGORMモデルとPostgreSQLスキーマとして実装しています。チーム集計用テーブルと担当変更履歴は追加していません。
 
 ### 5.1 テーブル概要
 
@@ -212,6 +211,7 @@ DB設計v2を第2回レビュー後のMVPと照合し、次の4テーブルをGO
 | --- | --- | --- |
 | `roles` | `id`, `name` | `name` は一意。初期値は `manager`, `employee` |
 | `users` | `id`, `name`, `email`, `password_hash`, `role_id`, `manager_id`, `is_active`, `deactivated_at`, timestamps | `email` は一意。`role_id` → `roles.id`。`manager_id` → `users.id` の自己参照で現在の担当managerを表す。氏名文字列では関連付けない |
+| `sessions` | `id`, `user_id`, `token_digest`, `expires_at`, `created_at` | `user_id` → `users.id`。SHA-256ダイジェストを32バイトの`bytea`で保存し、一意制約を設定。平文トークンは保存しない |
 | `conditions` | `id`, `code`, `name`, `score`, `display_order` | `code`, `name`, `score`, `display_order` はそれぞれ一意。5段階の固定値 |
 | `health_records` | `id`, `employee_id`, `record_date`, `timing`, `condition_id`, `comment`, `created_at` | `employee_id` → `users.id`、`condition_id` → `conditions.id`。同一employee・日付・timingを一意にする |
 
@@ -219,6 +219,9 @@ DB設計v2を第2回レビュー後のMVPと照合し、次の4テーブルをGO
 
 - PostgreSQLの各テーブルの主キーは整数とする。GORMモデルでは `uint`、PostgreSQLでは `bigint` として実装し、APIではIDを文字列として返してDBアクセス前に変換・検証する
 - `users.manager_id` はnullableな自己参照とし、employeeの現在の担当managerを示す。manager自身は `NULL` とする
+- `sessions.token_digest` は32バイトの`bytea`、NOT NULL、一意とし、一意indexをトークン検索にも使用する
+- `sessions.user_id`と`sessions.expires_at`にindexを設定し、ユーザー単位のセッション操作と期限切れ検索に使用する
+- sessionが参照しているuserの物理削除は拒否する。userの無効化ではsessionを保持し、認証処理で`is_active`を確認する
 - `health_records` に `UNIQUE (employee_id, record_date, timing)` を設定する
 - `timing` は `CHECK (timing IN ('clockIn', 'clockOut'))` とする
 - コメントは必須とし、`VARCHAR(500) NOT NULL` とする。空文字および空白文字だけのコメントは `CHECK` 制約で拒否する
@@ -249,23 +252,17 @@ docker compose run --rm backend /usr/local/bin/migrate
 
 このコマンドはGORMのマイグレーションとマスターデータ投入を同じトランザクションで実行します。テーブル、外部キー、NOT NULL、一意、CHECK、文字数の各制約はPostgreSQL上の統合テストで確認します。外部キー列には索引を設定し、`health_records`の複合一意索引はemployee別・日付順の取得にも利用できる並びにしています。
 
-本番のSupabase PostgreSQLではマイグレーションを2回実行し、どちらも成功しています。実行後は`roles`が2件、`conditions`が5件、`users`と`health_records`が0件であり、マスターデータの投入と、デモユーザー・体調記録が存在しないことを確認済みです。
+Issue #138では、本番のSupabase PostgreSQLへ既存4テーブルのマイグレーションを2回実行し、どちらも成功しています。Issue #139で追加した`sessions`は本番DBへ自動適用せず、管理用CLIも本番で自動実行しません。
 
 ## 6. ER図（実装済み）
 
-実装した4テーブルの関係を示します。今後の機能実装によって制約・カラム等を変更する場合は、モデル、マイグレーション、本文、図を同時に更新します。
-
-画像はテーブル間の関係を示す既存の構造図です。今回確定したコード値はDB構造を変えないため画像ファイルは更新せず、timingの値は5.2と以下のMermaidソースを正とします。
-
-![HealthBridgeのER図](images/er-diagram.png)
-
-<details>
-<summary>Mermaidソース</summary>
+実装した5テーブルの関係を示します。以下のMermaid図を、現在の実装に対応するER図とします。
 
 ```mermaid
 erDiagram
     ROLES ||--o{ USERS : "role_id"
     USERS o|--o{ USERS : "manager_id"
+    USERS ||--o{ SESSIONS : "user_id"
     USERS ||--o{ HEALTH_RECORDS : "employee_id"
     CONDITIONS ||--o{ HEALTH_RECORDS : "condition_id"
 
@@ -287,6 +284,14 @@ erDiagram
         timestamptz updated_at
     }
 
+    SESSIONS {
+        bigint id PK
+        bigint user_id FK
+        bytea token_digest UK "SHA-256; 32 bytes"
+        timestamptz expires_at
+        timestamptz created_at
+    }
+
     CONDITIONS {
         bigint id PK
         varchar code UK
@@ -306,15 +311,13 @@ erDiagram
     }
 ```
 
-</details>
-
 Mermaidの属性表現では複合一意制約を表しにくいため、`HEALTH_RECORDS` の `UNIQUE (employee_id, record_date, timing)` は本文とテーブル定義を正とします。
 
 ## 7. 今後の実装順序
 
 Render / Supabaseによる公開基盤の整備は完了しています。今後は次の順序で業務機能を実装します。
 
-1. セッション保存用テーブル、manager作成CLI、ログイン・ログアウトを実装する
+1. ログイン・ログアウト・現在ユーザー取得とセッション発行・検証を実装する
 2. Cookie、credential付きCORS、Origin検証、共通エラー、認証・認可middlewareを実装する
 3. 確定したcondition・timingコード、ID境界、manager表現に基づいてDTOと入力検証を定義する
 4. Gin上へMVP業務APIを画面単位で実装する

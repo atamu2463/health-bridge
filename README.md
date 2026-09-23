@@ -134,7 +134,7 @@ HTTPルーティングとmiddlewareにはGinを使用し、ルーターを起動
 | PostgreSQL接続 | 実装済み | Go / GORMから開発DBおよびSupabase PostgreSQLへ接続 |
 | HTTPサーバー | 実装済み | Ginルーターと `http.Server`、graceful shutdownを使用 |
 | Health Check API | 実装済み | `GET /health` は `200 OK` と `{"status":"ok"}` を返す |
-| DBモデル／マイグレーション | 実装済み | 4テーブル、制約、roles／conditionsマスターデータを明示コマンドで作成。本番DBでも実行済み |
+| DBモデル／マイグレーション | 実装済み | 5テーブル、制約、roles／conditionsマスターデータを明示コマンドで作成。Issue #139のsessionsは本番DB未反映 |
 | 業務API | 未実装 | API設計案のみ |
 | 実認証／サーバー側認可 | 未実装 | ログイン画面や401／403画面はモックUI |
 | DB永続化 | 基盤のみ実装 | テーブルとマスターデータは作成可能。画面データはモック状態 |
@@ -179,9 +179,36 @@ docker compose exec backend /usr/local/bin/migrate
 
 起動済みの`backend`コンテナ内でマイグレーションを実行します。
 
-`roles`、`users`、`conditions`、`health_records`を作成し、`roles`と`conditions`のマスターデータを投入します。複数回実行してもテーブルやマスターデータは重複しません。デモユーザーやデモ体調記録は投入しません。
+`roles`、`users`、`sessions`、`conditions`、`health_records`を作成し、`roles`と`conditions`のマスターデータを投入します。複数回実行してもテーブルやマスターデータは重複しません。デモユーザーやデモ体調記録は投入しません。
 
-### 4. バックエンドの起動確認
+Issue #139で追加した`sessions`はローカル実装であり、本番DBへは自動適用しません。
+
+### 4. 管理用CLIでのユーザー作成
+
+managerを作成します。
+
+```bash
+docker compose exec backend /usr/local/bin/create-user \
+  -name "任意の管理者名" \
+  -email "manager@example.com" \
+  -role manager
+```
+
+employeeは、先に作成した有効なmanagerのメールアドレスを指定します。
+
+```bash
+docker compose exec backend /usr/local/bin/create-user \
+  -name "任意の従業員名" \
+  -email "employee@example.com" \
+  -role employee \
+  -manager-email "manager@example.com"
+```
+
+パスワードはコマンド実行後に2回入力し、対話端末では画面へ表示しません。シェル履歴やプロセス一覧へ残さないため、コマンドライン引数には指定できません。固定パスワードを環境変数へ保存する運用も行いません。
+
+このCLIは必要なユーザーを手動で作成するためのものです。マイグレーションやコンテナ起動時にユーザーを自動投入せず、本番環境でも自動実行しません。パスワードはbcryptハッシュとして保存しますが、ログインAPI、Cookie、認証middlewareはまだ未実装です。
+
+### 5. バックエンドの起動確認
 
 ```bash
 curl http://localhost:8080/health
@@ -195,7 +222,7 @@ curl http://localhost:8080/health
 
 このエンドポイントはHTTPプロセスの稼働確認用であり、PostgreSQLへの疎通確認は行いません。
 
-### 5. 停止
+### 6. 停止
 
 ```bash
 docker compose down

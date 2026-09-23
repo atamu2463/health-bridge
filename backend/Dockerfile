@@ -13,6 +13,9 @@ RUN go build -o /usr/local/bin/health-bridge .
 # HTTPサーバーとは分けて明示的に実行できるよう、マイグレーション用バイナリを作成する。
 RUN go build -o /usr/local/bin/migrate ./cmd/migrate
 
+# 認証情報を引数へ含めず、必要なときだけ手動実行する管理用バイナリを作成する。
+RUN go build -o /usr/local/bin/create-user ./cmd/create-user
+
 EXPOSE 8080
 
 # ビルド済みのGoアプリを直接起動し、Dockerの終了シグナルを受け取れるようにする。
