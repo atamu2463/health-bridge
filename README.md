@@ -2,13 +2,15 @@
 
 従業員が日々の体調を記録し、本人の振り返りと管理者による状況把握を支援する体調管理・共有アプリです。
 
-現在は、就労移行支援事業所のスタッフによる第2回レビュー後のMVPを、フロントエンドのモックUIで確認できる段階です。バックエンドはGo / Gin / GORMによる共通基盤とDBモデル／マイグレーションまで実装しており、認証・業務API・フロントエンドとの接続は未実装です。
+現在は、就労移行支援事業所のスタッフによる第2回レビュー後のMVPを、フロントエンドのモックUIで確認できる段階です。Go / Gin / GORMによるバックエンド共通基盤をRenderへ、PostgreSQLをSupabaseへ公開していますが、認証・認可・業務API・フロントエンドとの接続は未実装です。
 
-## デモ
+## 公開環境
 
-フロントエンドのプロトタイプをVercelで公開しています。
+- フロントエンド（Vercel）：https://health-bridge-management.vercel.app/
+- バックエンド（Render）：https://health-bridge-p3kx.onrender.com
+- バックエンドのヘルスチェック：https://health-bridge-p3kx.onrender.com/health
 
-https://health-bridge-management.vercel.app/
+バックエンドのルート `/` は実装していないため、バックエンドURLを直接開くと404を返します。稼働確認にはヘルスチェックURLを使用します。また、Render Freeプランのスリープ後は、初回アクセスに時間がかかる場合があります。
 
 > [!IMPORTANT]
 > 公開デモは画面・操作フローを確認するためのモックUIです。入力内容はブラウザ内の一時状態としてのみ扱われ、実認証、サーバー側の認可、業務API、DB永続化は動作しません。
@@ -94,15 +96,15 @@ https://health-bridge-management.vercel.app/
 | フロントエンド | 実装済み・公開中 | Next.js / React / TypeScript / Tailwind CSS、Vercel |
 | UI | 実装済み | shadcn/ui / Radix UI |
 | グラフ | 実装済み | Recharts |
-| バックエンド | 共通基盤まで実装、今後拡張 | Go / Gin / GORM |
-| バックエンド配置 | 予定 | Render |
+| バックエンド | 共通基盤まで実装・公開中 | Go / Gin / GORM |
+| バックエンド配置 | 構築済み | Render Docker Web Service |
 | 開発DB | 接続処理まで実装 | Docker上のPostgreSQL |
-| 本番DB | 予定 | Supabase上のPostgreSQL |
+| 本番DB | 構築済み | Supabase PostgreSQL |
 | 開発環境 | 構築済み | Docker / Docker Compose |
 | バージョン管理 | 使用中 | Git / GitHub |
 
 > [!NOTE]
-> バックエンドは未デプロイです。Render、Supabaseは今後の予定であり、接続済みではありません。
+> 公開済みなのはバックエンド共通基盤と本番DBです。フロントエンドは引き続きモック中心であり、認証・認可・業務API・DB永続化には接続していません。
 
 ## 技術選定理由
 
@@ -129,15 +131,15 @@ HTTPルーティングとmiddlewareにはGinを使用し、ルーターを起動
 | --- | --- | --- |
 | フロントエンドのモックUI | 実装済み | 主要画面とブラウザ内の操作フローを確認可能 |
 | Docker開発環境 | 構築済み | Frontend / Backend / PostgreSQLをDocker Composeで構成 |
-| PostgreSQL接続 | 実装済み | Go / GORMから開発DBへ接続する処理 |
+| PostgreSQL接続 | 実装済み | Go / GORMから開発DBおよびSupabase PostgreSQLへ接続 |
 | HTTPサーバー | 実装済み | Ginルーターと `http.Server`、graceful shutdownを使用 |
 | Health Check API | 実装済み | `GET /health` は `200 OK` と `{"status":"ok"}` を返す |
-| DBモデル／マイグレーション | 実装済み | 4テーブル、制約、roles／conditionsマスターデータを明示コマンドで作成 |
+| DBモデル／マイグレーション | 実装済み | 4テーブル、制約、roles／conditionsマスターデータを明示コマンドで作成。本番DBでも実行済み |
 | 業務API | 未実装 | API設計案のみ |
 | 実認証／サーバー側認可 | 未実装 | ログイン画面や401／403画面はモックUI |
 | DB永続化 | 基盤のみ実装 | テーブルとマスターデータは作成可能。画面データはモック状態 |
 | フロントエンド／API接続 | 未実装 | 業務API実装後に接続予定 |
-| バックエンドのデプロイ | 未実施 | Renderへデプロイ予定 |
+| バックエンドのデプロイ | 実施済み | Renderで `GET /health` の正常応答を確認済み |
 
 ## ローカル開発環境
 

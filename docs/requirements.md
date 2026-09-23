@@ -182,8 +182,9 @@ managerの表示例：
 ### 6.1 現在の完成範囲
 
 - フロントエンド：モックUIと主要操作フロー
-- バックエンド：Go / Gin / GORMのPostgreSQL接続、`GET /health`、JSONエラー、CORS、graceful shutdownの共通基盤、4テーブルのモデル／マイグレーション、マスターデータ
-- 未完成：実認証、サーバー側認可、業務API、業務データのAPI経由での永続化、フロントエンドAPI接続、バックエンド公開
+- バックエンド：Go / Gin / GORMのPostgreSQL接続、`GET /health`、JSONエラー、CORS、graceful shutdownの共通基盤、4テーブルのモデル／マイグレーション、マスターデータ。Renderへ公開済み
+- 本番DB：Supabase PostgreSQLを構築し、マイグレーションとマスターデータ投入まで完了
+- 未完成：実認証、サーバー側認可、業務API、業務データのAPI経由での永続化、フロントエンドAPI接続
 
 ### 6.2 MVP後・将来検討
 
