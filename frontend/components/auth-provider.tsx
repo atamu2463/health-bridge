@@ -134,7 +134,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     const version = ++requestVersion.current
-    await logoutRequest()
+    try {
+      await logoutRequest()
+    } catch (error) {
+      if (error instanceof AuthApiError && error.status !== 0) {
+        try {
+          await getCurrentUser()
+        } catch (recheckError) {
+          if (
+            requestVersion.current === version &&
+            recheckError instanceof AuthApiError &&
+            recheckError.status === 401
+          ) {
+            setUser(null)
+            setErrorMessage(null)
+            setStatus("unauthenticated")
+          }
+        }
+      }
+      throw error
+    }
 
     if (requestVersion.current === version) {
       setUser(null)
