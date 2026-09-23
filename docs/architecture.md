@@ -22,17 +22,29 @@ Frontend: Next.js / React / TypeScript
         │ HTTP / JSON（接続予定）
         ▼
 Backend: Go / Gin / GORM
+配置: Render Docker Web Service（公開中）
 現在: GET /health、共通middleware、graceful shutdown、DBモデル／マイグレーション
-予定: PostgreSQLセッション認証、Ginによる業務API、Renderへ配置
+予定: PostgreSQLセッション認証、Ginによる業務API
         │
-        │ SQL / GORM
+        │ PostgreSQLプロトコル / GORM
+        │ Session pooler、TLS（sslmode=require）
         ▼
 PostgreSQL
 開発: Docker上
-本番: Supabase上を予定
+本番: Supabase PostgreSQL（構築済み）
 ```
 
-※バックエンドは未デプロイです。
+フロントエンドはモックUIを公開している段階であり、Render上のバックエンドとは業務APIで接続していません。GoバックエンドはGORMからSession poolerを経由してSupabase PostgreSQLへ接続し、Supabase Data API、Supabase Auth、`supabase-js`は使用しません。
+
+### 2.1 本番環境（構築済み）
+
+| 対象 | 配置・リージョン | 現在の設定・確認範囲 |
+| --- | --- | --- |
+| フロントエンド | Vercel | `https://health-bridge-management.vercel.app` でモックUIを公開 |
+| バックエンド | Render Docker Web Service / Singapore / Free | `main`をデプロイ対象とし、Root Directoryは`backend`。DockerfileのCMDを使用し、Docker Commandは上書きしていない。Health Check Pathは`/health`、Auto-Deployは無効 |
+| データベース | Supabase PostgreSQL / 東京 | GORMでPostgreSQLへ接続。Session poolerとTLS（`sslmode=require`）を使用 |
+
+Render Freeプランでは非稼働時間後にサービスがスリープし、次の初回アクセスに時間がかかる場合があります。
 
 ## 3. コンポーネントと実装状態
 
@@ -40,11 +52,11 @@ PostgreSQL
 | --- | --- | --- |
 | フロントエンド | 利用者別画面、入力、一覧、グラフ、モック操作 | モックUI実装済み。業務API未接続 |
 | モック状態管理 | 従業員・担当関係・体調記録の一時更新 | React Contextで実装。再読み込みで初期化 |
-| バックエンド | 認証・認可、業務ルール、DB操作 | Gin、PostgreSQL接続、共通middleware、graceful shutdown、DBモデル／マイグレーションまで実装 |
-| Health Check | HTTPプロセスの稼働確認 | `GET /health` 実装済み。DB疎通確認ではない |
+| バックエンド | 認証・認可、業務ルール、DB操作 | Gin、PostgreSQL接続、共通middleware、graceful shutdown、DBモデル／マイグレーションまで実装し、Renderへ公開済み |
+| Health Check | HTTPプロセスの稼働確認 | `GET /health` 実装済み。Renderの公開環境で正常応答を確認済み。DB疎通確認ではない |
 | 業務API | アカウント・体調記録・担当関係の処理 | 設計済み・未実装 |
 | 開発DB | ローカル開発データの保存 | Docker ComposeでPostgreSQLを構成。4テーブルとマスターデータを明示コマンドで作成可能 |
-| 本番DB | 公開環境のデータ保存 | Supabase上のPostgreSQLを使用予定、未構築 |
+| 本番DB | 公開環境のデータ保存 | Supabase PostgreSQLを構築し、マイグレーションとマスターデータ投入を実施済み |
 | 認証・認可 | PostgreSQLセッションとロール・担当関係に基づく制御 | 設計済み・未実装。ログイン、401、403は画面のみ |
 
 ## 4. API
@@ -57,9 +69,13 @@ PostgreSQL
 
 サーバー起動前にDB接続を行いますが、`GET /health` のハンドラー自体はDBへ問い合わせません。
 
+公開環境の `https://health-bridge-p3kx.onrender.com/health` では、HTTP 200、`Content-Type: application/json`、JSON `{"status":"ok"}` を確認しています。ルート `/` が404を返すのは、ルートを実装していない現在の仕様どおりです。Renderのログに接続文字列やDBパスワードが表示されていないことも確認済みです。
+
 ルーターは起動処理から分離しています。GinのLoggerとRecoveryを使用し、未定義ルートは `404`、panic時は `500` の安全なJSONを返します。内部エラーやSQL情報はレスポンスへ含めません。現在の基盤用エラーは単純な `{"error":"..."}` 形式であり、4.3で設計する共通形式への移行は未実装です。
 
 起動時に `DATABASE_URL` と `ALLOWED_ORIGINS` を必須環境変数として検証し、`PORT` は未指定時に `8080` を使用します。許可Originはカンマ区切りで明示し、ワイルドカードは受け付けません。現在のCORS middlewareはcredentialを許可せず、`GET` と `OPTIONS` だけを対象としています。Cookie認証に対応するCORS・CSRF処理は4.3のとおり設計済み・未実装です。
+
+現在の公開環境では、許可Origin `https://health-bridge-management.vercel.app` からのGETへ同じ値の `Access-Control-Allow-Origin` が付くことを確認しています。未許可Originからの通常GETはHTTP 200でも同ヘッダーを付けないため、ブラウザーはレスポンスを読み取れません。未許可OriginからのpreflightはHTTP 403、`{"error":"origin_not_allowed"}`、`Vary: Origin`を返し、`Access-Control-Allow-Origin`は付けません。これは現在実装済みのCORS検証範囲であり、Cookieを扱うcredential付きCORS、認証・認可、業務APIは引き続き設計済み・未実装です。
 
 HTTPサーバーはOSの終了シグナルを受けると10秒を上限にgraceful shutdownし、その後にDB接続を閉じます。起動失敗は通常停止と区別してエラーにします。
 
@@ -183,7 +199,7 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 - ローカル環境の `SameSite` 設定とVercel Preview URLを許可Originへ登録する運用
 - 無効化済みユーザーは既存セッションでも認証を許可しない。セッション行を削除するタイミングは関連実装時に決定する
 - 無効化後の履歴参照、担当変更履歴、同時更新の扱い
-- デモデータ、本番データの投入方法とRender／Supabase構成
+- 業務API実装後の本番デモデータ投入方法
 - manager自身の編集・削除UIと、到達不能な従業員検索・追加ダイアログのMVP上の扱い
 
 ## 5. DB設計（既存4テーブルは実装済み）
@@ -232,6 +248,8 @@ docker compose run --rm backend /usr/local/bin/migrate
 ```
 
 このコマンドはGORMのマイグレーションとマスターデータ投入を同じトランザクションで実行します。テーブル、外部キー、NOT NULL、一意、CHECK、文字数の各制約はPostgreSQL上の統合テストで確認します。外部キー列には索引を設定し、`health_records`の複合一意索引はemployee別・日付順の取得にも利用できる並びにしています。
+
+本番のSupabase PostgreSQLではマイグレーションを2回実行し、どちらも成功しています。実行後は`roles`が2件、`conditions`が5件、`users`と`health_records`が0件であり、マスターデータの投入と、デモユーザー・体調記録が存在しないことを確認済みです。
 
 ## 6. ER図（実装済み）
 
@@ -294,12 +312,13 @@ Mermaidの属性表現では複合一意制約を表しにくいため、`HEALTH
 
 ## 7. 今後の実装順序
 
+Render / Supabaseによる公開基盤の整備は完了しています。今後は次の順序で業務機能を実装します。
+
 1. セッション保存用テーブル、manager作成CLI、ログイン・ログアウトを実装する
 2. Cookie、credential付きCORS、Origin検証、共通エラー、認証・認可middlewareを実装する
 3. 確定したcondition・timingコード、ID境界、manager表現に基づいてDTOと入力検証を定義する
 4. Gin上へMVP業務APIを画面単位で実装する
 5. フロントエンドのモック状態をAPI接続へ置き換える
-6. Render / Supabaseの構成と公開環境を整備する
-7. API・DB・画面を通したテストとCIを整備する
+6. API・DB・画面を通したテストとCIを整備する
 
 機能・設計変更時はREADMEと関連docsも同じIssueで更新します。独立した設計変更や、本書に残した未確定事項・未定義UI等の不整合は、アプリ実装とは分けてIssueで追跡します。
