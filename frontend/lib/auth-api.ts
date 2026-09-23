@@ -53,8 +53,10 @@ async function requestAuth(
   path: string,
   init?: RequestInit,
 ): Promise<Response> {
+  const url = `${getApiBaseUrl()}${path}`
+
   try {
-    return await fetch(`${getApiBaseUrl()}${path}`, {
+    return await fetch(url, {
       ...init,
       credentials: "include",
       cache: "no-store",
