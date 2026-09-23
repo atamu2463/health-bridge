@@ -137,9 +137,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await logoutRequest()
     } catch (error) {
-      if (error instanceof AuthApiError && error.status !== 0) {
+      if (error instanceof AuthApiError) {
         try {
-          await getCurrentUser()
+          const currentUser = await getCurrentUser()
+          if (requestVersion.current === version) {
+            setUser(currentUser)
+            setErrorMessage(null)
+            setStatus("authenticated")
+          }
         } catch (recheckError) {
           if (
             requestVersion.current === version &&
