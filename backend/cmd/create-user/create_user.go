@@ -91,9 +91,9 @@ func createUser(db *gorm.DB, input createUserInput, bcryptCost int) (model.User,
 
 func validateCreateUserInput(input createUserInput) (createUserInput, error) {
 	input.Name = strings.TrimSpace(input.Name)
-	input.Email = strings.TrimSpace(input.Email)
+	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
 	input.Role = strings.TrimSpace(input.Role)
-	input.ManagerEmail = strings.TrimSpace(input.ManagerEmail)
+	input.ManagerEmail = strings.ToLower(strings.TrimSpace(input.ManagerEmail))
 
 	if input.Name == "" {
 		return createUserInput{}, errors.New("名前を入力してください")
