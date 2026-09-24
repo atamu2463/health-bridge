@@ -25,12 +25,14 @@ cp .default.env .env
 `.env` にはローカル開発専用の値を設定します。
 
 ```env
-POSTGRES_USER=任意のユーザー名
-POSTGRES_PASSWORD=任意のパスワード
+POSTGRES_USER=health_bridge
+POSTGRES_PASSWORD=local_dev_password_2026
 POSTGRES_DB=health_bridge
 BACKEND_PORT=8080
 ALLOWED_ORIGINS=http://localhost:3000
 ```
+
+`POSTGRES_USER` と `POSTGRES_PASSWORD` は、`docker-compose.yml` の `DATABASE_URL` へ直接埋め込まれるため、半角英数字、ハイフン、アンダースコアだけを使用します。`@`、`:`、`/`、`?`、`#`、`%`、空白など、URLの区切り文字として解釈される可能性がある文字は使用しないでください。`POSTGRES_PASSWORD` には、この範囲で十分な長さのローカル開発専用値を設定してください。
 
 フロントエンドがローカルAPIを呼び出せるよう、`frontend/.env.local` を作成します。
 
