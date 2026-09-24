@@ -63,28 +63,25 @@ HTTP固有処理をservice／repositoryへ持ち込まず、業務APIも同じ�
 | メソッド | パス | 目的 | 実装 |
 | --- | --- | --- | --- |
 | `GET` | `/health` | HTTPプロセスが応答できることを確認し、`200 OK` とJSON `{"status":"ok"}` を返す | Ginで実装済み |
-| `POST` | `/api/auth/login` | 資格情報を照合し、セッションCookieを発行する | Ginで実装済み。2026年9月24日に本番E2E確認済み |
-| `GET` | `/api/auth/me` | セッションから現在のユーザーを返す | 認証middlewareを含めてGinで実装済み。2026年9月24日に本番E2E確認済み |
-| `POST` | `/api/auth/logout` | セッションを削除し、Cookieを失効させる | Ginで実装済み。2026年9月24日に本番E2E確認済み |
+| `POST` | `/api/auth/login` | 資格情報を照合し、セッションCookieを発行する | 実装済み（本番E2E確認済み） |
+| `GET` | `/api/auth/me` | セッションから現在のユーザーを返す | 認証middlewareを含めて実装済み（本番E2E確認済み） |
+| `POST` | `/api/auth/logout` | セッションを削除し、Cookieを失効させる | 実装済み（本番E2E確認済み） |
 
-サーバー起動前にDB接続を行いますが、`GET /health` のハンドラー自体はDBへ問い合わせません。
+#### 実装上の補足
 
-公開環境の `https://health-bridge-p3kx.onrender.com/health` では、HTTP 200、`Content-Type: application/json`、JSON `{"status":"ok"}` を確認しています。ルート `/` が404を返すのは、ルートを実装していない現在の仕様どおりです。Renderのログに接続文字列やDBパスワードが表示されていないことも確認済みです。
+- **Health Check**：サーバー起動前にDBへ接続しますが、`GET /health`のハンドラー自体はDBへ問い合わせません。ルート`/`は未実装のため、`404`を返します。
+- **エラー処理**：ルーターを起動処理から分離し、GinのLoggerとRecoveryを使用しています。未定義ルートは`404`、panic時は`500`の安全なJSONを返します。内部エラーやSQL情報はレスポンスへ含めず、APIエラーは`error.code`と利用者向けの`error.message`を持つ共通形式で返します。
+- **設定と通信制御**：起動時に`DATABASE_URL`と`ALLOWED_ORIGINS`を必須検証し、`PORT`は未指定時に`8080`を使用します。許可Originはワイルドカードを使わず明示し、credential付きCORSと状態変更リクエストのOrigin検証を適用します。
+- **終了処理**：OSの終了シグナルを受けると10秒を上限にgraceful shutdownし、その後にDB接続を閉じます。起動失敗は通常停止と区別してエラーにします。
 
-ルーターは起動処理から分離しています。GinのLoggerとRecoveryを使用し、未定義ルートは `404`、panic時は `500` の安全なJSONを返します。内部エラーやSQL情報はレスポンスへ含めません。APIエラーは `error.code` と利用者向けの `error.message` を持つ共通形式で返します。
-
-起動時に `DATABASE_URL` と `ALLOWED_ORIGINS` を必須環境変数として検証し、`PORT` は未指定時に `8080` を使用します。許可Originはカンマ区切りで明示し、ワイルドカードは受け付けません。CORS middlewareはcredentialを許可し、Cookie認証に必要なHTTPメソッドとヘッダーを対象にします。状態変更リクエストではOriginを検証します。
-
-現在の公開環境では、credential付きCORS、Origin検証、セッション認証を反映済みです。2026年9月24日にVercel Originからのpreflightと認証E2Eを確認しました。業務APIと、本人・担当範囲に基づくサーバー側認可は未実装です。
-
-HTTPサーバーはOSの終了シグナルを受けると10秒を上限にgraceful shutdownし、その後にDB接続を閉じます。起動失敗は通常停止と区別してエラーにします。
+本番URL、レスポンスヘッダー、CORS、認証E2E、ログの確認結果は[デプロイ・運用手順](deployment.md)を参照してください。
 
 ### 4.2 MVPのAPI設計（認証API以外は未実装）
 
 | API ID | メソッド | パス | 目的 | 役割・データ範囲 | 関連機能 |
 | --- | --- | --- | --- | --- | --- |
 | API-02 | `POST` | `/api/auth/login` | メールアドレスとパスワードでログイン | 認証不要 | F-02 |
-| API-03 | `POST` | `/api/auth/logout` | ログイン状態を終了 | ログイン済みユーザー | F-02 |
+| API-03 | `POST` | `/api/auth/logout` | ログイン状態を終了 | 認証不要（セッションCookieがあれば削除） | F-02 |
 | API-04 | `POST` | `/api/employees` | employeeを作成し、実行者を担当managerに設定 | managerのみ | F-03 |
 | API-05 | `GET` | `/api/employees/{employeeId}` | employeeの登録情報を取得 | managerのみ・自身の担当employeeに限定 | F-09 |
 | API-06 | `PATCH` | `/api/employees/{employeeId}` | employeeの氏名・メールアドレス等を更新 | managerのみ・自身の担当employeeに限定 | F-13 |
@@ -186,7 +183,7 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 現在のフロントエンドで使用する型・値を維持しつつ、モック固有の表現を本番設計へ持ち込まないよう、次の方針で統一します。
 
 | 対象 | 確定した設計 | モックからの置き換え方針 |
-| --- | --- | --- | --- |
+| --- | --- | --- |
 | 最上位の体調コード | API・DBとも `excellent` | フロントエンドの既存コードをそのまま使用する |
 | 入力タイミング | API・DBの保存値とも `clockIn` / `clockOut` | フロントエンドの既存コードをそのまま使用する |
 | ID | DBは整数、APIは文字列 | `new-...` を廃止し、APIが返すIDへ置き換える |

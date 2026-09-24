@@ -88,6 +88,7 @@ cd frontend
 npm run format:check
 npm run lint
 npm run build
+cd ..
 ```
 
 バックエンド：
@@ -97,6 +98,7 @@ cd backend
 gofmt -l .
 go test ./...
 go vet ./...
+cd ..
 ```
 
 PostgreSQLを利用する統合テストは `TEST_DATABASE_URL` が設定されている場合に実行されます。実行先には、テスト専用で破棄可能なデータベースを使用してください。
