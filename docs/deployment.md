@@ -50,15 +50,39 @@ Renderが設定する `RENDER=true` を利用し、信頼するクライアン�
 
 ## 4. 本番migrationとユーザー作成
 
-HTTPサーバー起動時にmigrationは実行しません。デプロイ対象コードを確認したうえで、Renderから同じ `DATABASE_URL` を使用してmigrationバイナリを明示的に実行します。
+HTTPサーバー起動時にmigrationは実行しません。本番migrationは、デプロイ対象のコミットを取得したローカル環境から、Supabase PostgreSQLへ直接接続して実行します。
+
+実行前に、現在のブランチ、コミット、作業ツリーが本番へ反映する内容と一致していることを確認します。
 
 ```bash
-/usr/local/bin/migrate
+git switch main
+git pull --ff-only origin main
+git status --short
+
+cd backend
 ```
 
-migrationは再実行可能ですが、実行前後に対象環境とバックアップ方針を確認します。2026年9月24日時点で、5テーブルを含む本番migrationを複数回実行し、正常終了を確認済みです。
+`DATABASE_URL`はコマンドライン引数へ記載せず、入力内容を画面へ表示しない一時的な環境変数としてサブシェル内で渡します。サブシェル終了後、変数は親シェルへ残りません。
 
-デモ用manager／employeeは `/usr/local/bin/create-user` で手動作成します。パスワードは対話入力し、コマンドライン引数、環境変数、作業ログへ残しません。公開デモ資格情報は、本番の管理用資格情報と分け、破棄・再作成可能な専用アカウントとして扱います。
+```bash
+(
+  read -rsp "Supabase DATABASE_URL: " DATABASE_URL
+  echo
+  export DATABASE_URL
+
+  go run ./cmd/migrate
+)
+```
+
+終了コードが0となり、次のメッセージが表示されることを確認します。
+
+```text
+マイグレーションとマスターデータ投入が完了しました
+```
+
+migrationはトランザクション内で実行され、複数回実行してもマスターデータが重複しない構成です。2026年9月24日に本番環境で2回実行し、どちらも正常終了しました。その後、manager／employeeのログインとセッション復元を本番環境で確認しています。
+
+デモ用manager／employeeも、同じローカル環境から管理用CLIを使って手動作成します。パスワードは対話入力し、コマンドライン引数、環境変数、作業ログへ残しません。公開デモ資格情報は本番の管理用資格情報と分け、破棄・再作成可能な専用アカウントとして扱います。
 
 ## 5. デプロイ後の確認
 
