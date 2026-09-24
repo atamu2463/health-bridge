@@ -82,7 +82,38 @@ cd backend
 
 migrationはトランザクション内で実行され、複数回実行してもマスターデータが重複しない構成です。2026年9月24日に本番環境で2回実行し、どちらも正常終了しました。その後、manager／employeeのログインとセッション復元を本番環境で確認しています。
 
-デモ用manager／employeeも、同じローカル環境から管理用CLIを使って手動作成します。パスワードは対話入力し、コマンドライン引数、環境変数、作業ログへ残しません。公開デモ資格情報は本番の管理用資格情報と分け、破棄・再作成可能な専用アカウントとして扱います。
+デモ用manager／employeeも、同じローカル環境から管理用CLIを使って手動作成します。migrationとは別のサブシェルを使用し、managerを先に作成します。
+
+```bash
+(
+  read -rsp "Supabase DATABASE_URL: " DATABASE_URL
+  echo
+  export DATABASE_URL
+
+  go run ./cmd/create-user \
+    -name "デモ管理者" \
+    -email "manager@example.com" \
+    -role manager
+)
+```
+
+employeeを作成するときは、作成済みの有効なmanagerのメールアドレスを `-manager-email` に指定します。`DATABASE_URL` はmanager作成時とは別のサブシェルで改めて入力します。
+
+```bash
+(
+  read -rsp "Supabase DATABASE_URL: " DATABASE_URL
+  echo
+  export DATABASE_URL
+
+  go run ./cmd/create-user \
+    -name "デモ従業員" \
+    -email "employee@example.com" \
+    -role employee \
+    -manager-email "manager@example.com"
+)
+```
+
+パスワードはCLI起動後に対話入力し、コマンドライン引数、環境変数、作業ログへ残しません。各サブシェルの終了後、`DATABASE_URL` は親シェルへ残りません。公開デモ資格情報は本番の管理用資格情報と分け、破棄・再作成可能な専用アカウントとして扱います。
 
 ## 5. デプロイ後の確認
 
