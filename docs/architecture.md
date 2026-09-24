@@ -10,41 +10,26 @@
 
 業務API設計は実装前のものです。DBモデル、マイグレーション、マスターデータ、管理用ユーザー作成CLIに加え、セッション認証APIと認証middlewareは実装済みです。業務APIと、本人・担当範囲に基づくサーバー側認可は未実装です。
 
-## 2. 現在と予定のシステム構成
+## 2. 現在のシステム構成
 
-```text
-利用者のWebブラウザ
-        │
-        ▼
-Frontend: Next.js / React / TypeScript
-配置: Vercel（公開中）
-        │
-        │ HTTP / JSON（接続予定）
-        ▼
-Backend: Go / Gin / GORM
-配置: Render Docker Web Service（公開中）
-現在: GET /health、共通middleware、graceful shutdown、DBモデル／マイグレーション
-予定: PostgreSQLセッション認証、Ginによる業務API
-        │
-        │ PostgreSQLプロトコル / GORM
-        │ Session pooler、TLS（sslmode=require）
-        ▼
-PostgreSQL
-開発: Docker上
-本番: Supabase PostgreSQL（構築済み）
+```mermaid
+flowchart LR
+    Browser[Webブラウザ] -->|HTTPS| Frontend[Next.js / Vercel]
+    Frontend -->|credential付きfetch| Backend[Go / Gin API / Render]
+    Backend -->|GORM / TLS| Database[(Supabase PostgreSQL)]
 ```
 
-フロントエンドはモックUIを公開している段階であり、Render上のバックエンドとは業務APIで接続していません。GoバックエンドはGORMからSession poolerを経由してSupabase PostgreSQLへ接続し、Supabase Data API、Supabase Auth、`supabase-js`は使用しません。
+フロントエンドは認証APIへ接続済みです。体調記録や担当従業員管理等の業務画面はモック状態で、業務APIには接続していません。GoバックエンドはGORMからSession poolerを経由してSupabase PostgreSQLへ接続し、Supabase Data API、Supabase Auth、`supabase-js`は使用しません。
 
-### 2.1 本番環境（構築済み）
+### 2.1 本番環境（2026年9月24日確認）
 
 | 対象 | 配置・リージョン | 現在の設定・確認範囲 |
 | --- | --- | --- |
-| フロントエンド | Vercel | `https://health-bridge-management.vercel.app` でモックUIを公開 |
-| バックエンド | Render Docker Web Service / Singapore / Free | `main`をデプロイ対象とし、Root Directoryは`backend`。DockerfileのCMDを使用し、Docker Commandは上書きしていない。Health Check Pathは`/health`、Auto-Deployは無効 |
+| フロントエンド | Vercel | 公開画面と認証API接続を提供。業務画面はモック |
+| バックエンド | Render Docker Web Service / Singapore / Free | 認証APIとHealth Checkを公開 |
 | データベース | Supabase PostgreSQL / 東京 | GORMでPostgreSQLへ接続。Session poolerとTLS（`sslmode=require`）を使用 |
 
-Render Freeプランでは非稼働時間後にサービスがスリープし、次の初回アクセスに時間がかかる場合があります。
+VercelのProduction環境では `NEXT_PUBLIC_API_BASE_URL` を設定し、RenderからSupabaseへ接続します。2026年9月24日に `GET /health`、認証APIのpreflight、credential付きCORS、manager／employeeの認証E2Eを確認しました。具体的な環境変数、migration、確認手順は[デプロイ・運用手順](deployment.md)を参照してください。
 
 ## 3. コンポーネントと実装状態
 
@@ -52,12 +37,24 @@ Render Freeプランでは非稼働時間後にサービスがスリープし、
 | --- | --- | --- |
 | フロントエンド | 利用者別画面、入力、一覧、グラフ、モック操作 | モックUI実装済み。業務API未接続 |
 | モック状態管理 | 従業員・担当関係・体調記録の一時更新 | React Contextで実装。再読み込みで初期化 |
-| バックエンド | 認証・認可、業務ルール、DB操作 | ローカルでは認証API、セッション認証middleware、5テーブルのモデル／マイグレーション、管理用ユーザー作成CLIまで実装。RenderはIssue #138の共通基盤まで公開済み |
+| バックエンド | 認証・認可、業務ルール、DB操作 | 認証API、session middleware、レート制限、5テーブルのmigration、管理用CLIを実装し、認証部分は本番接続済み |
 | Health Check | HTTPプロセスの稼働確認 | `GET /health` 実装済み。Renderの公開環境で正常応答を確認済み。DB疎通確認ではない |
 | 業務API | アカウント・体調記録・担当関係の処理 | 設計済み・未実装 |
 | 開発DB | ローカル開発データの保存 | Docker ComposeでPostgreSQLを構成。5テーブルとマスターデータを明示コマンドで作成可能 |
-| 本番DB | 公開環境のデータ保存 | Supabase PostgreSQLを構築し、Issue #138時点の4テーブルとマスターデータを投入済み。Issue #139の`sessions`は未反映 |
-| 認証・認可 | PostgreSQLセッションとロール・担当関係に基づく制御 | セッション認証とrole確認middlewareは実装済み。業務APIの本人・担当範囲の認可は未実装。本番反映・本番E2Eは未確認 |
+| 本番DB | 公開環境のデータ保存 | Supabase PostgreSQLへ5テーブルとマスターデータのmigrationを適用済み |
+| 認証・認可 | PostgreSQLセッションとロール・担当関係に基づく制御 | セッション認証とrole確認は実装・本番確認済み。業務APIの本人・担当範囲の認可は未実装 |
+
+### 3.1 Goバックエンドのレイヤー
+
+| レイヤー | 責務 | 現在の実装 |
+| --- | --- | --- |
+| router／middleware | ルーティング、CORS、Origin検証、認証、role確認、レート制限 | 認証APIと共通middlewareを実装済み |
+| handler | HTTP入出力、Cookie、ステータス、レスポンス変換 | 認証handlerを実装済み |
+| service | セッション発行・検証等のドメイン処理 | 認証serviceを実装済み |
+| repository | GORMによるPostgreSQLアクセス | 認証repositoryを実装済み |
+| model／migration | DBモデル、制約、マスターデータ | 5テーブルを実装済み |
+
+HTTP固有処理をservice／repositoryへ持ち込まず、業務APIも同じ責務分離で追加する方針です。
 
 ## 4. API
 
@@ -66,28 +63,25 @@ Render Freeプランでは非稼働時間後にサービスがスリープし、
 | メソッド | パス | 目的 | 実装 |
 | --- | --- | --- | --- |
 | `GET` | `/health` | HTTPプロセスが応答できることを確認し、`200 OK` とJSON `{"status":"ok"}` を返す | Ginで実装済み |
-| `POST` | `/api/auth/login` | 資格情報を照合し、セッションCookieを発行する | Ginで実装済み。本番E2Eは未確認 |
-| `GET` | `/api/auth/me` | セッションから現在のユーザーを返す | 認証middlewareを含めてGinで実装済み。本番E2Eは未確認 |
-| `POST` | `/api/auth/logout` | セッションを削除し、Cookieを失効させる | Ginで実装済み。本番E2Eは未確認 |
+| `POST` | `/api/auth/login` | 資格情報を照合し、セッションCookieを発行する | 実装済み（本番E2E確認済み） |
+| `GET` | `/api/auth/me` | セッションから現在のユーザーを返す | 認証middlewareを含めて実装済み（本番E2E確認済み） |
+| `POST` | `/api/auth/logout` | セッションを削除し、Cookieを失効させる | 実装済み（本番E2E確認済み） |
 
-サーバー起動前にDB接続を行いますが、`GET /health` のハンドラー自体はDBへ問い合わせません。
+#### 実装上の補足
 
-公開環境の `https://health-bridge-p3kx.onrender.com/health` では、HTTP 200、`Content-Type: application/json`、JSON `{"status":"ok"}` を確認しています。ルート `/` が404を返すのは、ルートを実装していない現在の仕様どおりです。Renderのログに接続文字列やDBパスワードが表示されていないことも確認済みです。
+- **Health Check**：サーバー起動前にDBへ接続しますが、`GET /health`のハンドラー自体はDBへ問い合わせません。ルート`/`は未実装のため、`404`を返します。
+- **エラー処理**：ルーターを起動処理から分離し、GinのLoggerとRecoveryを使用しています。未定義ルートは`404`、panic時は`500`の安全なJSONを返します。内部エラーやSQL情報はレスポンスへ含めず、APIエラーは`error.code`と利用者向けの`error.message`を持つ共通形式で返します。
+- **設定と通信制御**：起動時に`DATABASE_URL`と`ALLOWED_ORIGINS`を必須検証し、`PORT`は未指定時に`8080`を使用します。許可Originはワイルドカードを使わず明示し、credential付きCORSと状態変更リクエストのOrigin検証を適用します。
+- **終了処理**：OSの終了シグナルを受けると10秒を上限にgraceful shutdownし、その後にDB接続を閉じます。起動失敗は通常停止と区別してエラーにします。
 
-ルーターは起動処理から分離しています。GinのLoggerとRecoveryを使用し、未定義ルートは `404`、panic時は `500` の安全なJSONを返します。内部エラーやSQL情報はレスポンスへ含めません。APIエラーは `error.code` と利用者向けの `error.message` を持つ共通形式で返します。
-
-起動時に `DATABASE_URL` と `ALLOWED_ORIGINS` を必須環境変数として検証し、`PORT` は未指定時に `8080` を使用します。許可Originはカンマ区切りで明示し、ワイルドカードは受け付けません。CORS middlewareはcredentialを許可し、Cookie認証に必要なHTTPメソッドとヘッダーを対象にします。状態変更リクエストではOriginを検証します。
-
-現在の公開環境では、Issue #138時点のCORSとヘルスチェックまで確認済みです。コード上ではcredential付きCORS、Origin検証、セッション認証を実装済みですが、これらの本番反映と本番E2Eは未確認です。業務APIと、本人・担当範囲に基づくサーバー側認可は未実装です。
-
-HTTPサーバーはOSの終了シグナルを受けると10秒を上限にgraceful shutdownし、その後にDB接続を閉じます。起動失敗は通常停止と区別してエラーにします。
+本番URL、レスポンスヘッダー、CORS、認証E2E、ログの確認結果は[デプロイ・運用手順](deployment.md)を参照してください。
 
 ### 4.2 MVPのAPI設計（認証API以外は未実装）
 
 | API ID | メソッド | パス | 目的 | 役割・データ範囲 | 関連機能 |
 | --- | --- | --- | --- | --- | --- |
 | API-02 | `POST` | `/api/auth/login` | メールアドレスとパスワードでログイン | 認証不要 | F-02 |
-| API-03 | `POST` | `/api/auth/logout` | ログイン状態を終了 | ログイン済みユーザー | F-02 |
+| API-03 | `POST` | `/api/auth/logout` | ログイン状態を終了 | 認証不要（セッションCookieがあれば削除） | F-02 |
 | API-04 | `POST` | `/api/employees` | employeeを作成し、実行者を担当managerに設定 | managerのみ | F-03 |
 | API-05 | `GET` | `/api/employees/{employeeId}` | employeeの登録情報を取得 | managerのみ・自身の担当employeeに限定 | F-09 |
 | API-06 | `PATCH` | `/api/employees/{employeeId}` | employeeの氏名・メールアドレス等を更新 | managerのみ・自身の担当employeeに限定 | F-13 |
@@ -119,7 +113,7 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 - 未認証、トークン不正、セッション無効または期限切れの場合は `401 Unauthorized` とする
 - 認証時にユーザーの有効状態を確認し、無効化済みユーザーは既存セッションが残っていても認証を許可せず `401 Unauthorized` とする
 
-`sessions`テーブル、bcrypt処理を行う管理用ユーザー作成CLI、ログイン・ログアウト・現在ユーザー取得、セッションの発行と検証、Cookie、認証middlewareは実装済みです。公開環境への反映と本番E2Eは未確認です。
+`sessions`テーブル、bcrypt処理を行う管理用ユーザー作成CLI、ログイン・ログアウト・現在ユーザー取得、セッションの発行と検証、Cookie、認証middlewareは実装済みです。2026年9月24日に本番環境で認証とセッション復元を確認しました。
 
 #### Cookie・CORS・CSRF
 
@@ -189,7 +183,7 @@ API-14「チーム体調傾向」は現行MVPから除外済みのため、業�
 現在のフロントエンドで使用する型・値を維持しつつ、モック固有の表現を本番設計へ持ち込まないよう、次の方針で統一します。
 
 | 対象 | 確定した設計 | モックからの置き換え方針 |
-| --- | --- | --- | --- |
+| --- | --- | --- |
 | 最上位の体調コード | API・DBとも `excellent` | フロントエンドの既存コードをそのまま使用する |
 | 入力タイミング | API・DBの保存値とも `clockIn` / `clockOut` | フロントエンドの既存コードをそのまま使用する |
 | ID | DBは整数、APIは文字列 | `new-...` を廃止し、APIが返すIDへ置き換える |
@@ -247,15 +241,9 @@ DB設計v2を第2回レビュー後のMVPと照合し、次の5テーブルをGO
 
 ### 5.4 マイグレーション
 
-HTTPサーバー起動時には自動マイグレーションを行いません。Docker ComposeでDBを起動した後、次の専用コマンドを明示的に実行します。
+HTTPサーバー起動時には自動migrationを行わず、専用バイナリを明示的に実行します。GORMのmigrationとマスターデータ投入は同じトランザクションで実行し、複数回実行しても重複しない構成です。ローカルでの実行方法は[ローカル開発手順](development.md)、本番での実行・確認方法は[デプロイ・運用手順](deployment.md)を参照してください。
 
-```bash
-docker compose run --rm backend /usr/local/bin/migrate
-```
-
-このコマンドはGORMのマイグレーションとマスターデータ投入を同じトランザクションで実行します。テーブル、外部キー、NOT NULL、一意、CHECK、文字数の各制約はPostgreSQL上の統合テストで確認します。外部キー列には索引を設定し、`health_records`の複合一意索引はemployee別・日付順の取得にも利用できる並びにしています。
-
-Issue #138では、本番のSupabase PostgreSQLへ既存4テーブルのマイグレーションを2回実行し、どちらも成功しています。Issue #139で追加した`sessions`は本番DBへ自動適用せず、管理用CLIも本番で自動実行しません。
+2026年9月24日時点で、本番のSupabase PostgreSQLへ`sessions`を含む5テーブルのmigrationを複数回実行し、正常終了を確認済みです。
 
 ## 6. ER図（実装済み）
 
