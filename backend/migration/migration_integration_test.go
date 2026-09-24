@@ -1,6 +1,8 @@
 package migration_test
 
 import (
+	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +13,7 @@ import (
 	"backend/config"
 	"backend/migration"
 	"backend/model"
+	"backend/repository"
 
 	"gorm.io/gorm"
 )
@@ -52,6 +55,7 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 			for _, table := range []any{
 				&model.Role{},
 				&model.User{},
+				&model.Session{},
 				&model.Condition{},
 				&model.HealthRecord{},
 			} {
@@ -78,6 +82,112 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 			if conditions[0].Code != model.ConditionCodeExcellent ||
 				conditions[4].Code != model.ConditionCodeBad {
 				return fmt.Errorf("conditionsの表示順が正しくありません: %#v", conditions)
+			}
+
+			return nil
+		})
+	})
+
+	t.Run("既存userのメールアドレスを正規化して複数回実行できる", func(t *testing.T) {
+		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
+			var role model.Role
+			if err := tx.Where("name = ?", model.RoleNameManager).First(&role).Error; err != nil {
+				return err
+			}
+			user := model.User{
+				Name:         "メール正規化テスト管理者",
+				Email:        "\t\n Existing-User@Example.Invalid \r\n\t",
+				PasswordHash: "test-password-hash",
+				RoleID:       role.ID,
+			}
+			if err := tx.Create(&user).Error; err != nil {
+				return err
+			}
+
+			if err := migration.Run(tx); err != nil {
+				return fmt.Errorf("メール正規化時のmigration.Run()に失敗しました: %w", err)
+			}
+			if err := migration.Run(tx); err != nil {
+				return fmt.Errorf("メール正規化後のmigration.Run()再実行に失敗しました: %w", err)
+			}
+
+			authRepository := repository.NewAuthRepository(tx)
+			foundUser, err := authRepository.FindUserByEmail(
+				context.Background(),
+				"existing-user@example.invalid",
+			)
+			if err != nil {
+				return fmt.Errorf("正規化後のメールアドレスでuserを取得できませんでした: %w", err)
+			}
+			if foundUser.ID != user.ID || foundUser.Email != "existing-user@example.invalid" {
+				return fmt.Errorf("正規化後のuser = %#v", foundUser)
+			}
+
+			return nil
+		})
+	})
+
+	t.Run("正規化結果が衝突する場合は全userを変更せず失敗する", func(t *testing.T) {
+		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
+			var role model.Role
+			if err := tx.Where("name = ?", model.RoleNameManager).First(&role).Error; err != nil {
+				return err
+			}
+			users := []model.User{
+				{
+					Name:         "衝突テスト管理者1",
+					Email:        "\tCollision@Example.Invalid\t",
+					PasswordHash: "test-password-hash",
+					RoleID:       role.ID,
+				},
+				{
+					Name:         "衝突テスト管理者2",
+					Email:        "collision@example.invalid",
+					PasswordHash: "test-password-hash",
+					RoleID:       role.ID,
+				},
+				{
+					Name:         "衝突時に変更しない管理者",
+					Email:        "\t Unchanged@Example.Invalid \n",
+					PasswordHash: "test-password-hash",
+					RoleID:       role.ID,
+				},
+			}
+			if err := tx.Create(&users).Error; err != nil {
+				return err
+			}
+
+			err := migration.Run(tx)
+			if err == nil {
+				return errors.New("正規化結果が衝突するmigration.Run()が成功しました")
+			}
+			sensitiveValues := []string{
+				users[0].Name,
+				users[0].Email,
+				users[1].Name,
+				users[1].Email,
+				users[2].Name,
+				users[2].Email,
+				"unchanged@example.invalid",
+			}
+			for _, value := range sensitiveValues {
+				if strings.Contains(err.Error(), value) {
+					return errors.New("衝突エラーにメールアドレスまたはユーザー情報が含まれています")
+				}
+			}
+
+			var storedUsers []model.User
+			userIDs := []uint{users[0].ID, users[1].ID, users[2].ID}
+			if err := tx.Where("id IN ?", userIDs).Order("id").Find(&storedUsers).Error; err != nil {
+				return err
+			}
+			if len(storedUsers) != len(users) {
+				return fmt.Errorf("衝突後のuser数 = %d, want %d", len(storedUsers), len(users))
+			}
+			for index := range users {
+				if storedUsers[index].ID != users[index].ID || storedUsers[index].Email != users[index].Email {
+					return errors.New("衝突後にuserが変更されました")
+				}
 			}
 
 			return nil
@@ -176,6 +286,7 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 			requiredColumns := map[string][]string{
 				"roles":          {"name"},
 				"users":          {"name", "email", "password_hash", "role_id", "is_active", "created_at", "updated_at"},
+				"sessions":       {"user_id", "token_digest", "expires_at", "created_at"},
 				"conditions":     {"code", "name", "score", "display_order"},
 				"health_records": {"employee_id", "record_date", "timing", "condition_id", "comment", "created_at"},
 			}
@@ -198,6 +309,148 @@ func TestMigrationOnPostgreSQL(t *testing.T) {
 				}
 			}
 
+			return nil
+		})
+	})
+
+	t.Run("sessionのuser外部キー制約", func(t *testing.T) {
+		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
+			digest := sha256.Sum256([]byte(fmt.Sprintf("invalid-user-%d", time.Now().UnixNano())))
+			err := tx.Create(&model.Session{
+				UserID:      999999,
+				TokenDigest: digest[:],
+				ExpiresAt:   time.Now().Add(time.Hour),
+			}).Error
+			if err == nil {
+				return errors.New("sessions.user_idの不正な参照が拒否されませんでした")
+			}
+			return nil
+		})
+	})
+
+	t.Run("sessionのトークンダイジェスト制約", func(t *testing.T) {
+		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
+			user, err := createSessionUser(tx, "digest")
+			if err != nil {
+				return err
+			}
+			digest := sha256.Sum256([]byte(fmt.Sprintf("duplicate-%d", time.Now().UnixNano())))
+			session := model.Session{
+				UserID:      user.ID,
+				TokenDigest: digest[:],
+				ExpiresAt:   time.Now().Add(time.Hour),
+			}
+			if err := tx.Create(&session).Error; err != nil {
+				return err
+			}
+
+			session.ID = 0
+			if err := tx.Create(&session).Error; err == nil {
+				return errors.New("sessions.token_digestの重複が拒否されませんでした")
+			}
+			return nil
+		})
+	})
+
+	t.Run("sessionのダイジェスト長CHECK制約", func(t *testing.T) {
+		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
+			user, err := createSessionUser(tx, "digest-length")
+			if err != nil {
+				return err
+			}
+			err = tx.Create(&model.Session{
+				UserID:      user.ID,
+				TokenDigest: make([]byte, model.SessionTokenDigestSize-1),
+				ExpiresAt:   time.Now().Add(time.Hour),
+			}).Error
+			if err == nil {
+				return errors.New("32バイトでないsessions.token_digestが拒否されませんでした")
+			}
+			return nil
+		})
+	})
+
+	t.Run("sessionのindexとカラム", func(t *testing.T) {
+		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
+			for _, indexName := range []string{
+				"ux_sessions_token_digest",
+				"idx_sessions_user_id",
+				"idx_sessions_expires_at",
+			} {
+				if !tx.Migrator().HasIndex(&model.Session{}, indexName) {
+					return fmt.Errorf("sessionsのindex %s が作成されていません", indexName)
+				}
+			}
+			if !tx.Migrator().HasConstraint(
+				&model.Session{},
+				"chk_sessions_token_digest_length",
+			) {
+				return errors.New("sessions.token_digestの長さCHECK制約が作成されていません")
+			}
+
+			var columns []string
+			if err := tx.Raw(`
+				SELECT column_name
+				FROM information_schema.columns
+				WHERE table_schema = current_schema()
+				  AND table_name = 'sessions'
+				ORDER BY ordinal_position
+			`).Scan(&columns).Error; err != nil {
+				return err
+			}
+			expectedColumns := []string{"id", "user_id", "token_digest", "expires_at", "created_at"}
+			if strings.Join(columns, ",") != strings.Join(expectedColumns, ",") {
+				return fmt.Errorf("sessions columns = %v, want %v", columns, expectedColumns)
+			}
+			return nil
+		})
+	})
+
+	t.Run("session参照中のuser物理削除を拒否する", func(t *testing.T) {
+		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
+			user, err := createSessionUser(tx, "delete")
+			if err != nil {
+				return err
+			}
+			digest := sha256.Sum256([]byte(fmt.Sprintf("delete-%d", time.Now().UnixNano())))
+			if err := tx.Create(&model.Session{
+				UserID:      user.ID,
+				TokenDigest: digest[:],
+				ExpiresAt:   time.Now().Add(time.Hour),
+			}).Error; err != nil {
+				return err
+			}
+			if err := tx.Delete(&user).Error; err == nil {
+				return errors.New("session参照中のuser物理削除が拒否されませんでした")
+			}
+			return nil
+		})
+	})
+
+	t.Run("user無効化後もsessionを保持する", func(t *testing.T) {
+		withMigratedDatabase(t, db, func(tx *gorm.DB) error {
+			user, err := createSessionUser(tx, "deactivate")
+			if err != nil {
+				return err
+			}
+			digest := sha256.Sum256([]byte(fmt.Sprintf("deactivate-%d", time.Now().UnixNano())))
+			if err := tx.Create(&model.Session{
+				UserID:      user.ID,
+				TokenDigest: digest[:],
+				ExpiresAt:   time.Now().Add(time.Hour),
+			}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&user).Update("is_active", false).Error; err != nil {
+				return err
+			}
+			var count int64
+			if err := tx.Model(&model.Session{}).Where("user_id = ?", user.ID).Count(&count).Error; err != nil {
+				return err
+			}
+			if count != 1 {
+				return fmt.Errorf("無効化後のsession count = %d, want 1", count)
+			}
 			return nil
 		})
 	})
@@ -355,4 +608,21 @@ func createHealthRecordReferences(tx *gorm.DB, suffix string) (model.User, model
 	}
 
 	return employee, condition, nil
+}
+
+func createSessionUser(tx *gorm.DB, suffix string) (model.User, error) {
+	var managerRole model.Role
+	if err := tx.Where("name = ?", model.RoleNameManager).First(&managerRole).Error; err != nil {
+		return model.User{}, err
+	}
+	user := model.User{
+		Name:         "セッションテスト管理者",
+		Email:        "session-" + suffix + "@example.invalid",
+		PasswordHash: "test-password-hash",
+		RoleID:       managerRole.ID,
+	}
+	if err := tx.Create(&user).Error; err != nil {
+		return model.User{}, err
+	}
+	return user, nil
 }

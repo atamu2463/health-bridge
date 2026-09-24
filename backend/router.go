@@ -5,78 +5,59 @@ import (
 	"log"
 	"net/http"
 
+	"backend/api"
+	"backend/handler"
+	"backend/middleware"
+
 	"github.com/gin-gonic/gin"
 )
 
-type errorResponse struct {
-	Error string `json:"error"`
+type authService interface {
+	handler.AuthService
+	middleware.AuthService
 }
 
-// アクセスログ、panic復旧、CORSを全ルートへ一貫して適用する。
-func newRouter(allowedOrigins []string) *gin.Engine {
+// アクセスログ、panic復旧、CORS、Origin検証を全ルートへ一貫して適用する。
+func newRouter(allowedOrigins []string, authService authService, authHandler *handler.AuthHandler, isRender bool) *gin.Engine {
 	router := gin.New()
+	configureClientIP(router, isRender)
 	router.Use(
 		gin.LoggerWithConfig(gin.LoggerConfig{SkipQueryString: true}),
 		gin.CustomRecoveryWithWriter(io.Discard, func(c *gin.Context, _ any) {
 			log.Print("HTTPリクエスト処理中のpanicをRecoveryしました")
-			c.AbortWithStatusJSON(
-				http.StatusInternalServerError,
-				errorResponse{Error: "internal_server_error"},
-			)
+			api.InternalServerError(c)
 		}),
-		corsMiddleware(allowedOrigins),
+		middleware.CORS(allowedOrigins),
+		middleware.RequireAllowedOrigin(allowedOrigins),
 	)
 
 	router.GET("/health", healthHandler)
+	auth := router.Group("/api/auth")
+	auth.Use(middleware.NoStore())
+	auth.POST("/login", middleware.LoginRateLimit(), authHandler.Login)
+	auth.GET("/me", middleware.RequireAuthentication(authService), authHandler.Me)
+	auth.POST("/logout", authHandler.Logout)
 	router.NoRoute(func(c *gin.Context) {
-		c.JSON(http.StatusNotFound, errorResponse{Error: "not_found"})
+		api.NotFound(c)
 	})
 
 	return router
 }
 
-func healthHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+// Renderでは外部からコンテナへ直接到達できず、CF-Connecting-IPは入口で上書きされる。
+// それ以外の環境では転送ヘッダーを信頼せず、RemoteAddrをクライアントIPとして扱う。
+func configureClientIP(router *gin.Engine, isRender bool) {
+	trustedProxies := []string(nil)
+	router.RemoteIPHeaders = nil
+	if isRender {
+		trustedProxies = []string{"0.0.0.0/0", "::/0"}
+		router.RemoteIPHeaders = []string{"CF-Connecting-IP"}
+	}
+	if err := router.SetTrustedProxies(trustedProxies); err != nil {
+		panic("trusted proxy設定に失敗しました")
+	}
 }
 
-// 許可したブラウザーOriginだけにレスポンスの読み取りを認める。
-func corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
-	allowed := make(map[string]struct{}, len(allowedOrigins))
-	for _, origin := range allowedOrigins {
-		allowed[origin] = struct{}{}
-	}
-
-	return func(c *gin.Context) {
-		c.Writer.Header().Add("Vary", "Origin")
-
-		origin := c.GetHeader("Origin")
-		if origin == "" {
-			c.Next()
-			return
-		}
-
-		if _, ok := allowed[origin]; !ok {
-			if c.Request.Method == http.MethodOptions {
-				c.AbortWithStatusJSON(
-					http.StatusForbidden,
-					errorResponse{Error: "origin_not_allowed"},
-				)
-				return
-			}
-
-			c.Next()
-			return
-		}
-
-		c.Header("Access-Control-Allow-Origin", origin)
-
-		if c.Request.Method == http.MethodOptions {
-			c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
-			c.Header("Access-Control-Allow-Headers", "Content-Type")
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-
-		c.Next()
-	}
+func healthHandler(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }

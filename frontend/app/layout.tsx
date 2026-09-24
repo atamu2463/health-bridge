@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next"
 import { Noto_Sans_JP } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
+import { AuthProvider } from "@/components/auth-provider"
+import { AuthRouteGuard } from "@/components/auth-route-guard"
 import { MockAppProvider } from "@/components/mock-app-provider"
 
 const notoSansJP = Noto_Sans_JP({
@@ -45,7 +47,11 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body className={`${notoSansJP.variable} font-sans antialiased`}>
-        <MockAppProvider>{children}</MockAppProvider>
+        <AuthProvider>
+          <AuthRouteGuard>
+            <MockAppProvider>{children}</MockAppProvider>
+          </AuthRouteGuard>
+        </AuthProvider>
         <Analytics />
       </body>
     </html>
