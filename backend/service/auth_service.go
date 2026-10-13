@@ -64,7 +64,7 @@ func NewAuthService(repository authRepository) *AuthService {
 	}
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (LoginResult, error) {
+func (s *AuthService) Login(ctx context.Context, email, password, expectedRole string) (LoginResult, error) {
 	user, err := s.repository.FindUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -75,6 +75,10 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (LoginR
 	}
 
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil || !user.IsActive {
+		return LoginResult{}, ErrInvalidCredentials
+	}
+
+	if user.Role.Name != expectedRole {
 		return LoginResult{}, ErrInvalidCredentials
 	}
 

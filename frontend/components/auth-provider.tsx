@@ -16,6 +16,7 @@ import {
   login as loginRequest,
   logout as logoutRequest,
   type AuthUser,
+  type UserRole,
 } from "@/lib/auth-api"
 
 export type AuthStatus =
@@ -25,7 +26,11 @@ interface AuthContextValue {
   status: AuthStatus
   user: AuthUser | null
   errorMessage: string | null
-  login: (email: string, password: string) => Promise<AuthUser>
+  login: (
+    email: string,
+    password: string,
+    expectedRole: UserRole,
+  ) => Promise<AuthUser>
   logout: () => Promise<void>
   refreshCurrentUser: () => Promise<void>
 }
@@ -108,29 +113,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const version = ++requestVersion.current
-    let authenticatedUser: AuthUser
+  const login = useCallback(
+    async (email: string, password: string, expectedRole: UserRole) => {
+      const version = ++requestVersion.current
+      let authenticatedUser: AuthUser
 
-    try {
-      authenticatedUser = await loginRequest(email, password)
-    } catch (error) {
-      if (requestVersion.current === version) {
-        setStatus((current) =>
-          current === "loading" ? "unauthenticated" : current,
-        )
+      try {
+        authenticatedUser = await loginRequest(email, password, expectedRole)
+      } catch (error) {
+        try {
+          const currentUser = await getCurrentUser()
+          if (requestVersion.current === version) {
+            setUser(currentUser)
+            setErrorMessage(null)
+            setStatus("authenticated")
+          }
+        } catch (recheckError) {
+          if (requestVersion.current === version) {
+            setUser(null)
+            if (
+              recheckError instanceof AuthApiError &&
+              recheckError.status === 401
+            ) {
+              setErrorMessage(null)
+              setStatus("unauthenticated")
+            } else {
+              setErrorMessage(safeErrorMessage(recheckError))
+              setStatus("error")
+            }
+          }
+        }
+        throw error
       }
-      throw error
-    }
 
-    if (requestVersion.current === version) {
-      setUser(authenticatedUser)
-      setErrorMessage(null)
-      setStatus("authenticated")
-    }
+      if (requestVersion.current === version) {
+        setUser(authenticatedUser)
+        setErrorMessage(null)
+        setStatus("authenticated")
+      }
 
-    return authenticatedUser
-  }, [])
+      return authenticatedUser
+    },
+    [],
+  )
 
   const logout = useCallback(async () => {
     const version = ++requestVersion.current

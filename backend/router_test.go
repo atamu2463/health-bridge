@@ -19,7 +19,7 @@ const testAllowedOrigin = "http://localhost:3000"
 
 type routerAuthService struct{}
 
-func (routerAuthService) Login(context.Context, string, string) (service.LoginResult, error) {
+func (routerAuthService) Login(context.Context, string, string, string) (service.LoginResult, error) {
 	return service.LoginResult{}, service.ErrInvalidCredentials
 }
 

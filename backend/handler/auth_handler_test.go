@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,13 +24,15 @@ type fakeAuthService struct {
 	logoutErr   error
 	loginEmail  string
 	loginPass   string
+	loginRole   string
 	logoutToken string
 	logoutCalls int
 }
 
-func (s *fakeAuthService) Login(_ context.Context, email, password string) (service.LoginResult, error) {
+func (s *fakeAuthService) Login(_ context.Context, email, password, expectedRole string) (service.LoginResult, error) {
 	s.loginEmail = email
 	s.loginPass = password
+	s.loginRole = expectedRole
 	return s.loginResult, s.loginErr
 }
 
@@ -48,7 +51,7 @@ func TestLoginReturnsUserAndSecureCookie(t *testing.T) {
 		},
 		Token: "session-token-secret", ExpiresAt: handlerTestExpiresAt,
 	}}
-	recorder := performHandlerRequest(http.MethodPost, "/api/auth/login", `{"email":" Employee@Example.Invalid ","password":"password"}`, NewAuthHandler(fake, true).Login, nil)
+	recorder := performHandlerRequest(http.MethodPost, "/api/auth/login", `{"email":" Employee@Example.Invalid ","password":"password","expectedRole":"employee"}`, NewAuthHandler(fake, true).Login, nil)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
@@ -57,7 +60,7 @@ func TestLoginReturnsUserAndSecureCookie(t *testing.T) {
 	if body := recorder.Body.String(); body != wantBody {
 		t.Fatalf("body = %q, want %q", body, wantBody)
 	}
-	if fake.loginEmail != "employee@example.invalid" || fake.loginPass != "password" {
+	if fake.loginEmail != "employee@example.invalid" || fake.loginPass != "password" || fake.loginRole != "employee" {
 		t.Fatal("Login() did not receive the expected credentials")
 	}
 
@@ -86,7 +89,7 @@ func TestLoginUsesLocalCookieAttributes(t *testing.T) {
 		Token:     "local-token",
 		ExpiresAt: handlerTestExpiresAt,
 	}}
-	recorder := performHandlerRequest(http.MethodPost, "/api/auth/login", `{"email":"manager@example.invalid","password":"password"}`, NewAuthHandler(fake, false).Login, nil)
+	recorder := performHandlerRequest(http.MethodPost, "/api/auth/login", `{"email":"manager@example.invalid","password":"password","expectedRole":"manager"}`, NewAuthHandler(fake, false).Login, nil)
 
 	cookie := recorder.Result().Cookies()[0]
 	if cookie.Secure || cookie.SameSite != http.SameSiteLaxMode {
@@ -99,18 +102,23 @@ func TestLoginRejectsInvalidRequests(t *testing.T) {
 		name string
 		body string
 	}{
+		{name: "missing role", body: `{"email":"user@example.invalid","password":"password"}`},
+		{name: "uppercase role", body: `{"email":"user@example.invalid","password":"password","expectedRole":"Manager"}`},
+		{name: "role with whitespace", body: `{"email":"user@example.invalid","password":"password","expectedRole":" employee "}`},
+		{name: "non-string role", body: `{"email":"user@example.invalid","password":"password","expectedRole":1}`},
+		{name: "invalid role", body: `{"email":"user@example.invalid","password":"password","expectedRole":"admin"}`},
 		{name: "invalid JSON", body: `{"email":`},
-		{name: "empty email", body: `{"email":" ","password":"password"}`},
-		{name: "empty password", body: `{"email":"user@example.invalid","password":""}`},
+		{name: "empty email", body: `{"email":" ","password":"password","expectedRole":"manager"}`},
+		{name: "empty password", body: `{"email":"user@example.invalid","password":"","expectedRole":"manager"}`},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fake := &fakeAuthService{}
-			recorder := performHandlerRequest(http.MethodPost, "/api/auth/login", tt.body, NewAuthHandler(fake, false).Login, nil)
+			recorder := performHandlerRequest(http.MethodPost, "/api/auth/login", tt.body, NewAuthHandler(fake, false).Login, nil, &http.Cookie{Name: SessionCookieName, Value: "existing-token"})
 			assertErrorResponse(t, recorder, http.StatusBadRequest, api.ErrorCodeInvalidRequest)
-			if fake.loginEmail != "" {
-				t.Fatal("Login() was called for an invalid request")
+			if fake.loginEmail != "" || fake.logoutCalls != 0 || len(recorder.Result().Cookies()) != 0 {
+				t.Fatal("invalid request must not authenticate or change the existing session")
 			}
 		})
 	}
@@ -130,7 +138,7 @@ func TestLoginMapsAuthenticationErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fake := &fakeAuthService{loginErr: tt.err}
-			recorder := performHandlerRequest(http.MethodPost, "/api/auth/login", `{"email":"secret@example.invalid","password":"password-secret"}`, NewAuthHandler(fake, false).Login, nil)
+			recorder := performHandlerRequest(http.MethodPost, "/api/auth/login", `{"email":"secret@example.invalid","password":"password-secret","expectedRole":"manager"}`, NewAuthHandler(fake, false).Login, nil)
 			assertErrorResponse(t, recorder, tt.wantStatus, tt.wantCode)
 			for _, secret := range []string{"secret@example.invalid", "password-secret"} {
 				if strings.Contains(recorder.Body.String(), secret) {
@@ -219,5 +227,38 @@ func assertErrorResponse(t *testing.T, recorder *httptest.ResponseRecorder, want
 	}
 	if !strings.Contains(recorder.Body.String(), `"error":{"code":"`+wantCode+`","message":"`) {
 		t.Fatalf("body does not use common error format: %s", recorder.Body.String())
+	}
+}
+
+func TestLoginRevokesExistingCookieBeforeAuthentication(t *testing.T) {
+	for _, role := range []string{"manager", "employee"} {
+		for _, revokeFails := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/revokeFails=%t", role, revokeFails), func(t *testing.T) {
+				fake := &fakeAuthService{loginErr: service.ErrInvalidCredentials}
+				if revokeFails {
+					fake.logoutErr = service.ErrInternal
+				}
+				body := fmt.Sprintf(`{"email":"user@example.invalid","password":"password","expectedRole":%q}`, role)
+				response := performHandlerRequest(http.MethodPost, "/api/auth/login", body, NewAuthHandler(fake, false).Login, nil, &http.Cookie{Name: SessionCookieName, Value: "old-token"})
+				status, code := http.StatusUnauthorized, api.ErrorCodeInvalidCredentials
+				if revokeFails {
+					status, code = http.StatusInternalServerError, api.ErrorCodeInternalServerError
+				}
+				assertErrorResponse(t, response, status, code)
+				if fake.logoutCalls != 1 || fake.logoutToken != "old-token" {
+					t.Fatal("existing session was not revoked")
+				}
+				if revokeFails && fake.loginEmail != "" {
+					t.Fatal("login continued after revocation failed")
+				}
+				if !revokeFails && fake.loginRole != role {
+					t.Fatal("expected role was not passed to service")
+				}
+				cookies := response.Result().Cookies()
+				if len(cookies) != 1 || cookies[0].MaxAge >= 0 || cookies[0].Value != "" || cookies[0].Path != "/api" {
+					t.Fatal("existing cookie was not expired")
+				}
+			})
+		}
 	}
 }

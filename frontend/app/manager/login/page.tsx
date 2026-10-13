@@ -37,10 +37,8 @@ export default function AdminLoginPage() {
     setErrorMessage(null)
 
     try {
-      const user = await login(email, password)
-      router.replace(
-        user.role === "manager" ? "/manager/menu" : "/employee/menu",
-      )
+      await login(email, password, "manager")
+      router.replace("/manager/menu")
     } catch (error) {
       if (
         error instanceof AuthApiError &&

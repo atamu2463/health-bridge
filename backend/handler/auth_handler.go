@@ -17,7 +17,7 @@ import (
 const SessionCookieName = "health_bridge_session"
 
 type AuthService interface {
-	Login(context.Context, string, string) (service.LoginResult, error)
+	Login(context.Context, string, string, string) (service.LoginResult, error)
 	Logout(context.Context, string) error
 }
 
@@ -27,8 +27,9 @@ type AuthHandler struct {
 }
 
 type loginRequest struct {
-	Email    string `json:"email" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Email        string `json:"email" binding:"required"`
+	Password     string `json:"password" binding:"required"`
+	ExpectedRole string `json:"expectedRole" binding:"required,oneof=manager employee"`
 }
 
 type AuthenticatedUserResponse struct {
@@ -60,7 +61,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	result, err := h.authService.Login(c.Request.Context(), email, request.Password)
+	// ログイン試行を新しい認証の開始とし、Cookieに対応する既存セッションを先に削除する。
+	if token, err := c.Cookie(SessionCookieName); err == nil {
+		h.expireSessionCookie(c)
+		if err := h.authService.Logout(c.Request.Context(), token); err != nil {
+			api.InternalServerError(c)
+			return
+		}
+	}
+
+	result, err := h.authService.Login(c.Request.Context(), email, request.Password, request.ExpectedRole)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
 			api.InvalidCredentials(c)

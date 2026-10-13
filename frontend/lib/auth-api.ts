@@ -136,13 +136,14 @@ async function readAuthResponse(response: Response): Promise<AuthResponse> {
 export async function login(
   email: string,
   password: string,
+  expectedRole: UserRole,
 ): Promise<AuthUser> {
   const response = await requestAuth("/api/auth/login", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, expectedRole }),
   })
 
   return (await readAuthResponse(response)).user
