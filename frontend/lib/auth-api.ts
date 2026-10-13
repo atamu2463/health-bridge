@@ -133,6 +133,10 @@ async function readAuthResponse(response: Response): Promise<AuthResponse> {
   return body
 }
 
+/**
+ * Submits credentials and the login screen's expected role with session cookies.
+ * Returns the authenticated user or throws AuthApiError for a failed request or invalid response.
+ */
 export async function login(
   email: string,
   password: string,

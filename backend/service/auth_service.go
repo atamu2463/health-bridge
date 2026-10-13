@@ -64,6 +64,8 @@ func NewAuthService(repository authRepository) *AuthService {
 	}
 }
 
+// Login creates a session only for an active user with a valid password and the expected role.
+// Role mismatches return ErrInvalidCredentials; the returned token is stored only as a digest.
 func (s *AuthService) Login(ctx context.Context, email, password, expectedRole string) (LoginResult, error) {
 	user, err := s.repository.FindUserByEmail(ctx, email)
 	if err != nil {

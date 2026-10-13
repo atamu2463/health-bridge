@@ -29,6 +29,7 @@ type fakeAuthService struct {
 	logoutCalls int
 }
 
+// Login records the credentials and expected role and returns the configured test result.
 func (s *fakeAuthService) Login(_ context.Context, email, password, expectedRole string) (service.LoginResult, error) {
 	s.loginEmail = email
 	s.loginPass = password
@@ -42,6 +43,7 @@ func (s *fakeAuthService) Logout(_ context.Context, token string) error {
 	return s.logoutErr
 }
 
+// TestLoginReturnsUserAndSecureCookie checks normalized credentials, role forwarding, and a secret-free response.
 func TestLoginReturnsUserAndSecureCookie(t *testing.T) {
 	managerID := uint(9)
 	fake := &fakeAuthService{loginResult: service.LoginResult{
@@ -83,6 +85,7 @@ func TestLoginReturnsUserAndSecureCookie(t *testing.T) {
 	}
 }
 
+// TestLoginUsesLocalCookieAttributes checks that local sessions use non-secure, SameSite=Lax cookies.
 func TestLoginUsesLocalCookieAttributes(t *testing.T) {
 	fake := &fakeAuthService{loginResult: service.LoginResult{
 		User:      service.AuthenticatedUser{ID: 1, Role: "manager"},
@@ -97,6 +100,7 @@ func TestLoginUsesLocalCookieAttributes(t *testing.T) {
 	}
 }
 
+// TestLoginRejectsInvalidRequests checks that malformed credentials or roles leave existing sessions untouched.
 func TestLoginRejectsInvalidRequests(t *testing.T) {
 	tests := []struct {
 		name string
@@ -124,6 +128,7 @@ func TestLoginRejectsInvalidRequests(t *testing.T) {
 	}
 }
 
+// TestLoginMapsAuthenticationErrors checks HTTP error mapping without disclosing submitted credentials.
 func TestLoginMapsAuthenticationErrors(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -230,6 +235,7 @@ func assertErrorResponse(t *testing.T, recorder *httptest.ResponseRecorder, want
 	}
 }
 
+// TestLoginRevokesExistingCookieBeforeAuthentication checks cookie expiration and aborts on revocation failure.
 func TestLoginRevokesExistingCookieBeforeAuthentication(t *testing.T) {
 	for _, role := range []string{"manager", "employee"} {
 		for _, revokeFails := range []bool{false, true} {

@@ -19,6 +19,7 @@ const testAllowedOrigin = "http://localhost:3000"
 
 type routerAuthService struct{}
 
+// Login always rejects credentials so router tests exercise unauthenticated responses without a database.
 func (routerAuthService) Login(context.Context, string, string, string) (service.LoginResult, error) {
 	return service.LoginResult{}, service.ErrInvalidCredentials
 }

@@ -45,6 +45,10 @@ function safeErrorMessage(error: unknown): string {
   return "認証状態を確認できませんでした。しばらくしてからもう一度お試しください。"
 }
 
+/**
+ * Provides session state and authentication actions to descendants.
+ * Request versions prevent older responses from overwriting newer state.
+ */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading")
   const [user, setUser] = useState<AuthUser | null>(null)
@@ -113,6 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  /** Authenticates the expected role, rechecking the actual session before rethrowing login errors. */
   const login = useCallback(
     async (email: string, password: string, expectedRole: UserRole) => {
       const version = ++requestVersion.current

@@ -87,6 +87,7 @@ func (r *fakeAuthRepository) DeleteSessionByTokenDigest(_ context.Context, token
 	return nil
 }
 
+// TestLoginSuccess checks the matching user's session token, stored digest, and expiration.
 func TestLoginSuccess(t *testing.T) {
 	password := "correct-password"
 	repository := newFakeAuthRepository()
@@ -143,6 +144,7 @@ func TestDummyPasswordHashIsValid(t *testing.T) {
 	}
 }
 
+// TestLoginUsesBcryptPasswordComparison checks that plaintext password hashes cannot create sessions.
 func TestLoginUsesBcryptPasswordComparison(t *testing.T) {
 	repository := newFakeAuthRepository()
 	user := testUser(t, "correct-password", true)
@@ -163,6 +165,7 @@ func TestLoginUsesBcryptPasswordComparison(t *testing.T) {
 	}
 }
 
+// TestLoginRejectsInvalidCredentialsAndInactiveUser checks shared errors and no session creation for rejected users.
 func TestLoginRejectsInvalidCredentialsAndInactiveUser(t *testing.T) {
 	activeUser := testUser(t, "correct-password", true)
 	inactiveUser := testUser(t, "correct-password", false)
@@ -279,6 +282,7 @@ func TestAuthenticateRejectsUnavailableSession(t *testing.T) {
 	}
 }
 
+// TestLogoutRevokesSessionAndIsIdempotent checks that revoked tokens stop authenticating and repeated logout succeeds.
 func TestLogoutRevokesSessionAndIsIdempotent(t *testing.T) {
 	repository := newFakeAuthRepository()
 	user := testUser(t, "correct-password", true)
@@ -306,6 +310,7 @@ func TestLogoutRevokesSessionAndIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestAuthenticationErrorsDoNotExposeSecrets checks that dependency failures return only the shared internal error.
 func TestAuthenticationErrorsDoNotExposeSecrets(t *testing.T) {
 	secret := "postgresql://user:database-password@example.invalid/db"
 	password := "user-password-secret"
@@ -425,6 +430,7 @@ func (r errorReader) Read(_ []byte) (int, error) {
 	return 0, r.err
 }
 
+// TestLoginChecksExpectedRoleBeforeGeneratingSession checks both roles and rejects mismatches before token generation.
 func TestLoginChecksExpectedRoleBeforeGeneratingSession(t *testing.T) {
 	for _, role := range []string{model.RoleNameManager, model.RoleNameEmployee} {
 		t.Run(role, func(t *testing.T) {

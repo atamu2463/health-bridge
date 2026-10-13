@@ -23,12 +23,15 @@ import (
 	"gorm.io/gorm"
 )
 
+// TestAuthenticationHTTPFlowOnPostgreSQL verifies session and role enforcement for both user roles.
 func TestAuthenticationHTTPFlowOnPostgreSQL(t *testing.T) {
 	for _, role := range []string{model.RoleNameEmployee, model.RoleNameManager} {
 		t.Run(role, func(t *testing.T) { testAuthenticationHTTPFlow(t, role) })
 	}
 }
 
+// testAuthenticationHTTPFlow exercises login, protected routes, logout, and rejected login attempts
+// for roleName in a rolled-back schema. It skips when TEST_DATABASE_URL is unset.
 func testAuthenticationHTTPFlow(t *testing.T, roleName string) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {

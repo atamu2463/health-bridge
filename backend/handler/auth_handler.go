@@ -48,6 +48,8 @@ func NewAuthHandler(authService AuthService, cookieSecure bool) *AuthHandler {
 	return &AuthHandler{authService: authService, cookieSecure: cookieSecure}
 }
 
+// Login validates the request, revokes any submitted session, and authenticates the expected role.
+// Invalid requests preserve the session; revocation failures stop login with an internal error.
 func (h *AuthHandler) Login(c *gin.Context) {
 	var request loginRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
