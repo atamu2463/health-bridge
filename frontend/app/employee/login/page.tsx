@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthApiError } from "@/lib/auth-api"
 
+/** Renders the employee login form with submission state and safe error messages. */
 export default function EmployeeLoginPage() {
   const router = useRouter()
   const { login } = useAuth()
@@ -25,6 +26,7 @@ export default function EmployeeLoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
+  /** Requires the employee role and opens its menu after a successful login. */
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (isSubmitting) {
@@ -35,10 +37,8 @@ export default function EmployeeLoginPage() {
     setErrorMessage(null)
 
     try {
-      const user = await login(email, password)
-      router.replace(
-        user.role === "manager" ? "/manager/menu" : "/employee/menu",
-      )
+      await login(email, password, "employee")
+      router.replace("/employee/menu")
     } catch (error) {
       if (
         error instanceof AuthApiError &&

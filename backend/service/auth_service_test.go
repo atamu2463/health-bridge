@@ -87,6 +87,7 @@ func (r *fakeAuthRepository) DeleteSessionByTokenDigest(_ context.Context, token
 	return nil
 }
 
+// TestLoginSuccess checks the matching user's session token, stored digest, and expiration.
 func TestLoginSuccess(t *testing.T) {
 	password := "correct-password"
 	repository := newFakeAuthRepository()
@@ -94,7 +95,7 @@ func TestLoginSuccess(t *testing.T) {
 	randomToken := bytes.Repeat([]byte{0xab}, sessionTokenSize)
 	service := testAuthService(repository, randomToken)
 
-	result, err := service.Login(context.Background(), "manager@example.invalid", password)
+	result, err := service.Login(context.Background(), "manager@example.invalid", password, model.RoleNameManager)
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
@@ -143,6 +144,7 @@ func TestDummyPasswordHashIsValid(t *testing.T) {
 	}
 }
 
+// TestLoginUsesBcryptPasswordComparison checks that plaintext password hashes cannot create sessions.
 func TestLoginUsesBcryptPasswordComparison(t *testing.T) {
 	repository := newFakeAuthRepository()
 	user := testUser(t, "correct-password", true)
@@ -153,6 +155,7 @@ func TestLoginUsesBcryptPasswordComparison(t *testing.T) {
 		context.Background(),
 		user.Email,
 		"correct-password",
+		model.RoleNameManager,
 	)
 	if !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("Login() error = %v, want ErrInvalidCredentials", err)
@@ -162,6 +165,7 @@ func TestLoginUsesBcryptPasswordComparison(t *testing.T) {
 	}
 }
 
+// TestLoginRejectsInvalidCredentialsAndInactiveUser checks shared errors and no session creation for rejected users.
 func TestLoginRejectsInvalidCredentialsAndInactiveUser(t *testing.T) {
 	activeUser := testUser(t, "correct-password", true)
 	inactiveUser := testUser(t, "correct-password", false)
@@ -187,6 +191,7 @@ func TestLoginRejectsInvalidCredentialsAndInactiveUser(t *testing.T) {
 				context.Background(),
 				tt.email,
 				tt.password,
+				model.RoleNameManager,
 			)
 			if err != ErrInvalidCredentials {
 				t.Fatalf("Login() error = %v, want the shared ErrInvalidCredentials", err)
@@ -277,13 +282,14 @@ func TestAuthenticateRejectsUnavailableSession(t *testing.T) {
 	}
 }
 
+// TestLogoutRevokesSessionAndIsIdempotent checks that revoked tokens stop authenticating and repeated logout succeeds.
 func TestLogoutRevokesSessionAndIsIdempotent(t *testing.T) {
 	repository := newFakeAuthRepository()
 	user := testUser(t, "correct-password", true)
 	repository.users[user.Email] = user
 	service := testAuthService(repository, bytes.Repeat([]byte{0x42}, sessionTokenSize))
 
-	login, err := service.Login(context.Background(), user.Email, "correct-password")
+	login, err := service.Login(context.Background(), user.Email, "correct-password", model.RoleNameManager)
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
@@ -304,6 +310,7 @@ func TestLogoutRevokesSessionAndIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestAuthenticationErrorsDoNotExposeSecrets checks that dependency failures return only the shared internal error.
 func TestAuthenticationErrorsDoNotExposeSecrets(t *testing.T) {
 	secret := "postgresql://user:database-password@example.invalid/db"
 	password := "user-password-secret"
@@ -318,7 +325,7 @@ func TestAuthenticationErrorsDoNotExposeSecrets(t *testing.T) {
 			name: "user lookup failure",
 			run: func(repository *fakeAuthRepository) error {
 				repository.findUserErr = errors.New(secret)
-				_, err := testAuthService(repository, nil).Login(context.Background(), user.Email, password)
+				_, err := testAuthService(repository, nil).Login(context.Background(), user.Email, password, model.RoleNameManager)
 				return err
 			},
 		},
@@ -327,7 +334,7 @@ func TestAuthenticationErrorsDoNotExposeSecrets(t *testing.T) {
 			run: func(repository *fakeAuthRepository) error {
 				repository.users[user.Email] = user
 				repository.createSessionErr = errors.New(secret)
-				_, err := testAuthService(repository, bytes.Repeat([]byte{1}, sessionTokenSize)).Login(context.Background(), user.Email, password)
+				_, err := testAuthService(repository, bytes.Repeat([]byte{1}, sessionTokenSize)).Login(context.Background(), user.Email, password, model.RoleNameManager)
 				return err
 			},
 		},
@@ -337,7 +344,7 @@ func TestAuthenticationErrorsDoNotExposeSecrets(t *testing.T) {
 				repository.users[user.Email] = user
 				service := testAuthService(repository, nil)
 				service.random = errorReader{err: errors.New(secret)}
-				_, err := service.Login(context.Background(), user.Email, password)
+				_, err := service.Login(context.Background(), user.Email, password, model.RoleNameManager)
 				return err
 			},
 		},
@@ -421,4 +428,37 @@ type errorReader struct {
 
 func (r errorReader) Read(_ []byte) (int, error) {
 	return 0, r.err
+}
+
+// TestLoginChecksExpectedRoleBeforeGeneratingSession checks both roles and rejects mismatches before token generation.
+func TestLoginChecksExpectedRoleBeforeGeneratingSession(t *testing.T) {
+	for _, role := range []string{model.RoleNameManager, model.RoleNameEmployee} {
+		t.Run(role, func(t *testing.T) {
+			for _, matches := range []bool{true, false} {
+				repository := newFakeAuthRepository()
+				user := testUser(t, "correct-password", true)
+				user.Role.Name = role
+				repository.users[user.Email] = user
+				expected := role
+				if !matches {
+					expected = model.RoleNameEmployee
+					if role == expected {
+						expected = model.RoleNameManager
+					}
+				}
+				svc := testAuthService(repository, bytes.Repeat([]byte{1}, sessionTokenSize))
+				if !matches {
+					svc.random = errorReader{err: errors.New("must not generate token")}
+				}
+				result, err := svc.Login(context.Background(), user.Email, "correct-password", expected)
+				if matches {
+					if err != nil || result.User.Role != role || len(repository.sessions) != 1 {
+						t.Fatal("matching role did not create the expected session")
+					}
+				} else if err != ErrInvalidCredentials || result.Token != "" || repository.lastCreatedSession != nil || len(repository.sessions) != 0 {
+					t.Fatal("role mismatch must reject credentials before generating or storing a session")
+				}
+			}
+		})
+	}
 }

@@ -133,16 +133,21 @@ async function readAuthResponse(response: Response): Promise<AuthResponse> {
   return body
 }
 
+/**
+ * Submits credentials and the login screen's expected role with session cookies.
+ * Returns the authenticated user or throws AuthApiError for a failed request or invalid response.
+ */
 export async function login(
   email: string,
   password: string,
+  expectedRole: UserRole,
 ): Promise<AuthUser> {
   const response = await requestAuth("/api/auth/login", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, expectedRole }),
   })
 
   return (await readAuthResponse(response)).user
